@@ -4,7 +4,7 @@ Gitogram is a CLI Git-based messenger, where you can treat all messages as commi
 
 Main idea came from my father's message - [@viordash](https://github.com/viordash):
 
-![Viordash Ideas message](https://www.dropbox.com/scl/fi/nhg2qfrco41m6lgsv2ikr/viordash-ideas.png?rlkey=jgqtfmk3k9pun0ino56ikd08d&dl=1 "Idea root of Gitogram")
+![viordash-ideas](https://github.com/IlorDash/gitogram/assets/48730197/e3c3bfe1-9562-4304-afdd-b8e67e51f678)
 
 Translation:
 > A git-based messenger. Just a UI wrapper over the git. Messages are comments on a commit. One repo is one group chat. Authorization is native from git. It is convenient to discuss a separate topic, aka a separate brunch. Then you can pour the discussion into the general chat. Or throw it out by closing the chat. Or squash just a discussion digest
