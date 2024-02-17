@@ -1,6 +1,6 @@
 # The Gitogram Project
 
-Gitogram is a Git-based messenger, where you can treat all messages as commits, topics as branches and group chats as repos. All branches can be merged in main branch and so on.
+Gitogram is a CLI Git-based messenger, where you can treat all messages as commits, topics as branches and group chats as repos. All branches can be merged in main branch and so on.
 
 Main idea came from my father's message - [@viordash](https://github.com/viordash):
 
