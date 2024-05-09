@@ -1,8 +1,10 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -31,13 +33,39 @@ type serverData struct {
 
 var server serverData
 
-func Run() {
-	router := gin.New()
-	router.GET("/chats", getChats)
-	router.POST("/chats", postChat)
+func collectChats() chat {
+	tLink, _ := url.Parse("foo.com/bar")
+	ilya := chatMember{username: "ilordash", visibleName: "Ilya Orazov", activity: time.Now()}
+	vit := chatMember{username: "viordash", visibleName: "Father", activity: time.Now().Add(10 * time.Minute)}
+	alex := chatMember{username: "alordash", visibleName: "Aleksei", activity: time.Now().Add(30 * time.Minute)}
+	chatMems := []chatMember{ilya, vit, alex}
+	tChat := chat{
+		link:    tLink,
+		members: chatMems,
+	}
+	return tChat
+}
 
-	router.Run("localhost:8080")
-	server.status = running
+func Run() {
+
+	server.chats = append(server.chats, collectChats())
+
+	if server.status == running {
+		gin.SetMode(gin.DebugMode)
+
+		file, fileErr := os.Create("gin-debug.log")
+		if fileErr != nil {
+			fmt.Println(fileErr)
+			return
+		}
+		gin.DefaultWriter = file
+
+		router := gin.New()
+		router.GET("/chats", getChats)
+		router.POST("/chats", postChat)
+
+		router.Run("localhost:8080")
+	}
 }
 
 func getChats(c *gin.Context) {
