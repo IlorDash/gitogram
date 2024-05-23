@@ -22,3 +22,6 @@ go.work
 
 gitogram
 .vscode*
+
+# Go test's files
+.env
