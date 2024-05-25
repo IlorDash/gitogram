@@ -23,10 +23,15 @@ func setupTest(t *testing.T) {
 		t.Fatalf("TEST_REPO_URL not set in environment %v", err)
 		return
 	}
+
+	t.Log("Get repository URL", repoURL)
 }
 
 func teardownTest(t *testing.T) {
 	t.Log("Teardown for test")
+	path := GetPath(repoURL)
+	os.RemoveAll(path)
+	t.Log("Removed", path)
 }
 
 func TestGetChat(t *testing.T) {
@@ -38,7 +43,7 @@ func TestGetChat(t *testing.T) {
 		memNum string
 		msgNum string
 	}
-	want := Res{"", "", ""}
+	want := Res{name: GetPath(repoURL), memNum: "1", msgNum: "0"}
 	var ans Res
 	var err error
 	ans.name, ans.memNum, ans.msgNum, err = GetChat(repoURL)
