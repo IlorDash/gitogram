@@ -91,21 +91,27 @@ func queueUpdateAndDraw(app *tview.Application, f func()) {
 	app.QueueUpdateDraw(f)
 }
 
-func (c *chatUI) chatName(name string) {
-	queueUpdateAndDraw(c.app, func() {
-		c.header.name.SetText(name)
+func (ui *chatUI) chatName(s string) {
+	queueUpdateAndDraw(ui.app, func() {
+		if ui.header.name != nil {
+			ui.header.name.SetText(s)
+		}
 	})
 }
 
-func (c *chatUI) msgNum(num string) {
-	queueUpdateAndDraw(c.app, func() {
-		c.header.msgNumCell.SetText(num)
+func (ui *chatUI) msgNum(s string) {
+	queueUpdateAndDraw(ui.app, func() {
+		if ui.header.msgNumCell != nil {
+			ui.header.msgNumCell.SetText(s)
+		}
 	})
 }
 
-func (c *chatUI) memNum(num string) {
-	queueUpdateAndDraw(c.app, func() {
-		c.header.memNumCell.SetText(num)
+func (ui *chatUI) memNum(s string) {
+	queueUpdateAndDraw(ui.app, func() {
+		if ui.header.memNumCell != nil {
+			ui.header.memNumCell.SetText(s)
+		}
 	})
 }
 
@@ -128,10 +134,15 @@ func getChat(pages *tview.Pages, c *chatUI) func() {
 			url = newUrl
 		})
 		getChatForm.AddButton("Get", func() {
-			name, memNum, msgNum := client.GetChat(url)
-			c.chatName(name)
-			c.memNum(memNum)
-			c.msgNum(msgNum)
+			go func() {
+				name, memNum, msgNum, err := client.GetChat(url)
+				if err != nil {
+					return
+				}
+				c.chatName(name)
+				c.memNum(memNum)
+				c.msgNum(msgNum)
+			}()
 		})
 
 		getChatForm.AddButton("Quit", func() {
