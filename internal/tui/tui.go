@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"errors"
 	"log"
 
 	"github.com/IlorDash/gitogram/internal/client"
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -46,7 +48,7 @@ func createModalForm(form tview.Primitive, height int, width int) tview.Primitiv
 	return modal
 }
 
-func getChat(pages *tview.Pages, c *chatUI) func() {
+func getChat(s *screen, pages *tview.Pages, c *chatUI) func() {
 	return func() {
 		var url string
 		getChatForm := tview.NewForm()
@@ -66,12 +68,14 @@ func getChat(pages *tview.Pages, c *chatUI) func() {
 		})
 
 		getChatForm.AddButton("Quit", func() {
+			s.showModal = false
 			pages.SwitchToPage("main")
 			pages.RemovePage("modal")
 		})
 		getChatForm.SetButtonsAlign(tview.AlignCenter)
 		getChatForm.SetBorder(true).SetTitle("Get chat")
 		modal := createModalForm(getChatForm, 13, 55)
+		s.showModal = true
 		pages.AddPage("modal", modal, true, true)
 	}
 }
@@ -90,11 +94,10 @@ type chatUI struct {
 }
 
 func createChatUI(app *tview.Application) (c *chatUI) {
-	chatPanel := tview.NewFlex().SetDirection(tview.FlexRow)
-
 	c = &chatUI{}
 	c.app = app
-	c.panel = chatPanel
+	c.panel = tview.NewFlex().SetDirection(tview.FlexRow)
+	c.panel.SetBorder(true)
 
 	c.header.name = tview.NewTextView()
 	c.header.name.SetText("Chat@")
@@ -118,22 +121,22 @@ func createChatUI(app *tview.Application) (c *chatUI) {
 	chatInfoPanel.AddItem(chatInfo, 0, 1, false)
 
 	c.chat = tview.NewTextView()
-	c.chat.SetBorder(true)
 	c.chat.SetChangedFunc(func() {
 		app.Draw()
 	})
+	c.chat.SetBorder(true)
 
-	chatPanel.AddItem(chatInfoPanel, 5, 1, true).
+	c.panel.AddItem(chatInfoPanel, 5, 1, false).
 		AddItem(c.chat, 0, 1, false)
 
 	return c
 }
 
-func createCmdList(app *tview.Application, pages *tview.Pages, c *chatUI) *tview.List {
+func createCmdList(s *screen, pages *tview.Pages, c *chatUI) *tview.List {
 	commandList := tview.NewList()
 	commandList.SetBorder(true).SetTitle("Commands")
 	commandList.ShowSecondaryText(false)
-	commandList.AddItem("Get chat", "", 'g', getChat(pages, c))
+	commandList.AddItem("Get chat", "", 'g', getChat(s, pages, c))
 	commandList.AddItem("Choose chat", "", 'c', func() {
 		// git.Chat
 	})
@@ -142,7 +145,7 @@ func createCmdList(app *tview.Application, pages *tview.Pages, c *chatUI) *tview
 	})
 	commandList.AddItem("Quit", "", 'q', func() {
 		// Save config here
-		app.Stop()
+		s.app.Stop()
 	})
 	return commandList
 }
@@ -157,39 +160,36 @@ func createLog(app *tview.Application) *logLayout {
 	log := &logLayout{}
 
 	log.text = tview.NewTextView()
-	log.text.SetBorder(true).SetTitle("Logs")
 	log.text.SetDynamicColors(true).
-		SetRegions(true).
 		SetWordWrap(true).
 		SetScrollable(true).
 		SetChangedFunc(func() {
 			app.Draw()
 		})
 
-	buttons := tview.NewForm().
-		AddButton("Scroll Down", func() {
-			log.text.ScrollToEnd()
-		}).
-		AddButton("Scroll Up", func() {
-			log.text.ScrollToBeginning()
-		})
-
 	log.panel = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(log.text, 0, 1, true).
-		AddItem(buttons, 10, 1, false)
+		AddItem(log.text, 0, 1, true)
+	log.panel.SetBorder(true).SetTitle("Logs")
 	return log
 }
 
-type appLayout struct {
+type screenLayout struct {
 	cmdList *tview.List
 	logView *logLayout
 	chat    *tview.Flex
 }
 
-func createAppLayout(l *appLayout) *tview.Flex {
+type screen struct {
+	app        *tview.Application
+	layout     screenLayout
+	panels     []tview.Primitive
+	focusPanel tview.Primitive
+	showModal  bool
+}
 
-	appLayout := tview.NewFlex().SetDirection(tview.FlexColumn).AddItem(
+func createScreenLayout(l screenLayout) *tview.Flex {
+	screenLayout := tview.NewFlex().SetDirection(tview.FlexColumn).AddItem(
 		tview.NewFlex().
 			SetDirection(tview.FlexRow).
 			AddItem(l.cmdList, 0, 1, true).
@@ -203,36 +203,94 @@ func createAppLayout(l *appLayout) *tview.Flex {
 	footer.SetTextAlign(tview.AlignCenter)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(appLayout, 0, 20, true).
+		AddItem(screenLayout, 0, 20, true).
 		AddItem(footer, 3, 1, false)
 
 	return layout
 }
 
+func (s *screen) highlightPanel(p tview.Primitive) error {
+
+	s.layout.chat.SetBorderColor(tcell.ColorWhite)
+	s.layout.cmdList.SetBorderColor(tcell.ColorWhite)
+	s.layout.logView.panel.SetBorderColor(tcell.ColorWhite)
+
+	switch p {
+	case s.layout.chat:
+		s.layout.chat.SetBorderColor(tcell.ColorGreen)
+	case s.layout.cmdList:
+		s.layout.cmdList.SetBorderColor(tcell.ColorGreen)
+	case s.layout.logView.panel:
+		s.layout.logView.panel.SetBorderColor(tcell.ColorGreen)
+	default:
+		return errors.New("invalid panel border")
+	}
+	return nil
+}
+
+func (s *screen) setFocus(i int) error {
+	if i > len(s.panels) {
+		return errors.New("invalid screen panel")
+	}
+	s.app.SetFocus(s.panels[i])
+	s.focusPanel = s.panels[i]
+	s.highlightPanel(s.panels[i])
+	return nil
+}
+
+func setKeyboardHandler(s *screen) {
+	i := 1
+
+	s.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+
+		switch event.Key() {
+		case tcell.KeyTab:
+			if s.showModal {
+				return event
+			}
+			i = (i + 1) % len(s.panels)
+			err := s.setFocus(i)
+			if err != nil {
+				log.Fatalln(err)
+			}
+			return nil
+		default:
+			return event
+		}
+	})
+}
+
 func createApp() *tview.Application {
-	app := tview.NewApplication()
+
+	s := &screen{}
+	s.app = tview.NewApplication()
 	pages := tview.NewPages()
 
-	layout := &appLayout{}
+	chatUI := createChatUI(s.app)
 
-	chatUI := createChatUI(app)
+	s.layout.chat = chatUI.panel
+	s.layout.cmdList = createCmdList(s, pages, chatUI)
+	s.layout.logView = createLog(s.app)
+	s.showModal = false
 
-	layout.chat = chatUI.panel
-	layout.cmdList = createCmdList(app, pages, chatUI)
-	layout.logView = createLog(app)
+	s.panels = []tview.Primitive{s.layout.chat, s.layout.cmdList, s.layout.logView.panel}
 
 	msg := log.New(chatUI.chat, "", log.LstdFlags)
 	msg.Println("You got mail!")
 	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lshortfile)
-	log.SetOutput(layout.logView.text)
+	log.SetOutput(s.layout.logView.text)
 
-	mainPageLayout := createAppLayout(layout)
+	mainPageLayout := createScreenLayout(s.layout)
+
+	s.highlightPanel(s.layout.cmdList)
+
+	setKeyboardHandler(s)
 
 	pages.AddPage("main", mainPageLayout, true, true)
 
-	app.SetRoot(pages, true)
+	s.app.SetRoot(pages, true)
 
-	return app
+	return s.app
 }
 
 func Run() {
