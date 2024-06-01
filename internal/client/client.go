@@ -114,8 +114,6 @@ func collectChatInfo(chatPath string) (Chat, error) {
 		return Chat{}, err
 	}
 
-	Chats = append(Chats, chat)
-
 	return chat, nil
 }
 
@@ -145,12 +143,14 @@ func GetChat(url string) (string, int, int, error) {
 		return "", 0, 0, err
 	}
 
+	// ... retrieving the branch being pointed by HEAD
 	ref, err := repo.Head()
 	if err != nil {
 		log.Println("Error retrieving HEAD:", err)
 		return "", 0, 0, err
 	}
 
+	// ... retrieving the commit object
 	commit, err := repo.CommitObject(ref.Hash())
 	if err != nil {
 		log.Println("Error retrieving commit:", err)
@@ -174,6 +174,8 @@ func GetChat(url string) (string, int, int, error) {
 			return "", 0, 0, err
 		}
 	}
+
+	Chats = append(Chats, chat)
 
 	return chat.Name, len(chat.Members), chat.MsgNum, nil
 }
