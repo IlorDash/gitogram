@@ -9,6 +9,58 @@ import (
 	"github.com/rivo/tview"
 )
 
+type chatHeader struct {
+	name          *tview.TextView
+	msgNumCell    *tview.TableCell
+	memberNumCell *tview.TableCell
+}
+
+type chatUI struct {
+	app    *tview.Application
+	panel  *tview.Flex
+	header chatHeader
+	chat   *tview.TextView
+}
+
+func createChatUI(app *tview.Application) (c *chatUI) {
+	c = &chatUI{}
+	c.app = app
+	c.panel = tview.NewFlex().SetDirection(tview.FlexRow)
+	c.panel.SetBorder(true)
+
+	c.header.name = tview.NewTextView()
+	c.header.name.SetText("Chat@")
+	c.header.name.SetTextAlign(tview.AlignLeft)
+
+	chatInfo := tview.NewTable()
+
+	chatInfo.SetCellSimple(0, 0, "Messages:")
+	chatInfo.GetCell(0, 0).SetAlign(tview.AlignRight)
+	c.header.msgNumCell = tview.NewTableCell("0")
+	chatInfo.SetCell(0, 1, c.header.msgNumCell)
+
+	chatInfo.SetCellSimple(1, 0, "Members:")
+	chatInfo.GetCell(1, 0).SetAlign(tview.AlignRight)
+	c.header.memberNumCell = tview.NewTableCell("0")
+	chatInfo.SetCell(1, 1, c.header.memberNumCell)
+
+	chatInfoPanel := tview.NewFlex().SetDirection(tview.FlexColumn)
+	chatInfoPanel.SetBorder(true)
+	chatInfoPanel.AddItem(c.header.name, 0, 1, false)
+	chatInfoPanel.AddItem(chatInfo, 0, 1, false)
+
+	c.chat = tview.NewTextView()
+	c.chat.SetChangedFunc(func() {
+		app.Draw()
+	})
+	c.chat.SetBorder(true)
+
+	c.panel.AddItem(chatInfoPanel, 5, 1, false).
+		AddItem(c.chat, 0, 1, false)
+
+	return c
+}
+
 func queueUpdateAndDraw(app *tview.Application, f func()) {
 	app.QueueUpdateDraw(f)
 }
@@ -78,58 +130,6 @@ func getChat(s *screen, pages *tview.Pages, c *chatUI) func() {
 		s.showModal = true
 		pages.AddPage("modal", modal, true, true)
 	}
-}
-
-type chatHeader struct {
-	name          *tview.TextView
-	msgNumCell    *tview.TableCell
-	memberNumCell *tview.TableCell
-}
-
-type chatUI struct {
-	app    *tview.Application
-	panel  *tview.Flex
-	header chatHeader
-	chat   *tview.TextView
-}
-
-func createChatUI(app *tview.Application) (c *chatUI) {
-	c = &chatUI{}
-	c.app = app
-	c.panel = tview.NewFlex().SetDirection(tview.FlexRow)
-	c.panel.SetBorder(true)
-
-	c.header.name = tview.NewTextView()
-	c.header.name.SetText("Chat@")
-	c.header.name.SetTextAlign(tview.AlignLeft)
-
-	chatInfo := tview.NewTable()
-
-	chatInfo.SetCellSimple(0, 0, "Messages:")
-	chatInfo.GetCell(0, 0).SetAlign(tview.AlignRight)
-	c.header.msgNumCell = tview.NewTableCell("0")
-	chatInfo.SetCell(0, 1, c.header.msgNumCell)
-
-	chatInfo.SetCellSimple(1, 0, "Members:")
-	chatInfo.GetCell(1, 0).SetAlign(tview.AlignRight)
-	c.header.memberNumCell = tview.NewTableCell("0")
-	chatInfo.SetCell(1, 1, c.header.memberNumCell)
-
-	chatInfoPanel := tview.NewFlex().SetDirection(tview.FlexColumn)
-	chatInfoPanel.SetBorder(true)
-	chatInfoPanel.AddItem(c.header.name, 0, 1, false)
-	chatInfoPanel.AddItem(chatInfo, 0, 1, false)
-
-	c.chat = tview.NewTextView()
-	c.chat.SetChangedFunc(func() {
-		app.Draw()
-	})
-	c.chat.SetBorder(true)
-
-	c.panel.AddItem(chatInfoPanel, 5, 1, false).
-		AddItem(c.chat, 0, 1, false)
-
-	return c
 }
 
 func createCmdList(s *screen, pages *tview.Pages, c *chatUI) *tview.List {
