@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -29,7 +28,7 @@ type Chat struct {
 	MsgNum  int          `json:"msgNum"`
 }
 
-var chatPaths []string
+var Chats []Chat
 
 func getUserName() (string, error) {
 	homeDir, err := os.UserHomeDir()
@@ -115,7 +114,7 @@ func collectChatInfo(chatPath string) (Chat, error) {
 		return Chat{}, err
 	}
 
-	chatPaths = append(chatPaths, chatPath)
+	Chats = append(Chats, chat)
 
 	return chat, nil
 }
@@ -132,51 +131,49 @@ func UpdateChatInfo(chat Chat) {
 	os.WriteFile(filepath.Join(path, "info.json"), chatJson, os.ModePerm)
 }
 
-func GetChat(url string) (string, string, string, error) {
+func GetChat(url string) (string, int, int, error) {
 
 	path := GetPath(url)
 
-	r, err := git.PlainClone(path, false, &git.CloneOptions{
+	repo, err := git.PlainClone(path, false, &git.CloneOptions{
 		URL:               url,
 		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
 	})
 
 	if err != nil {
 		log.Println("Error clonning", err)
-		return "", "", "", err
+		return "", 0, 0, err
 	}
 
-	// ... retrieving the branch being pointed by HEAD
-	ref, err := r.Head()
+	ref, err := repo.Head()
 	if err != nil {
 		log.Println("Error retrieving HEAD:", err)
-		return "", "", "", err
+		return "", 0, 0, err
 	}
 
-	// ... retrieving the commit object
-	commit, err := r.CommitObject(ref.Hash())
+	commit, err := repo.CommitObject(ref.Hash())
 	if err != nil {
 		log.Println("Error retrieving commit:", err)
-		return "", "", "", err
+		return "", 0, 0, err
 	}
 
 	log.Println(commit)
 
-	info, err := collectChatInfo(path)
+	chat, err := collectChatInfo(path)
 
 	if err != nil {
 		var e *os.PathError
 		switch {
 		case errors.As(err, &e):
-			info, err = createChatInfo(url, path)
+			chat, err = createChatInfo(url, path)
 			if err != nil {
-				return "", "", "", err
+				return "", 0, 0, err
 			}
 		default:
 			log.Println("Unexpected error during collect chat info:", err)
-			return "", "", "", err
+			return "", 0, 0, err
 		}
 	}
 
-	return info.Name, strconv.Itoa(len(info.Members)), strconv.Itoa(info.MsgNum), nil
+	return chat.Name, len(chat.Members), chat.MsgNum, nil
 }

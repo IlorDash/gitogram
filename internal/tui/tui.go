@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"log"
+	"strconv"
 
 	"github.com/IlorDash/gitogram/internal/client"
 	"github.com/gdamore/tcell/v2"
@@ -10,9 +11,9 @@ import (
 )
 
 type chatHeader struct {
-	name          *tview.TextView
-	msgNumCell    *tview.TableCell
-	memberNumCell *tview.TableCell
+	name      *tview.TextView
+	msgNum    *tview.TableCell
+	memberNum *tview.TableCell
 }
 
 type chatUI struct {
@@ -36,13 +37,13 @@ func createChatUI(app *tview.Application) (c *chatUI) {
 
 	chatInfo.SetCellSimple(0, 0, "Messages:")
 	chatInfo.GetCell(0, 0).SetAlign(tview.AlignRight)
-	c.header.msgNumCell = tview.NewTableCell("0")
-	chatInfo.SetCell(0, 1, c.header.msgNumCell)
+	c.header.msgNum = tview.NewTableCell("0")
+	chatInfo.SetCell(0, 1, c.header.msgNum)
 
 	chatInfo.SetCellSimple(1, 0, "Members:")
 	chatInfo.GetCell(1, 0).SetAlign(tview.AlignRight)
-	c.header.memberNumCell = tview.NewTableCell("0")
-	chatInfo.SetCell(1, 1, c.header.memberNumCell)
+	c.header.memberNum = tview.NewTableCell("0")
+	chatInfo.SetCell(1, 1, c.header.memberNum)
 
 	chatInfoPanel := tview.NewFlex().SetDirection(tview.FlexColumn)
 	chatInfoPanel.SetBorder(true)
@@ -65,26 +66,26 @@ func queueUpdateAndDraw(app *tview.Application, f func()) {
 	app.QueueUpdateDraw(f)
 }
 
-func (ui *chatUI) chatName(s string) {
-	queueUpdateAndDraw(ui.app, func() {
-		if ui.header.name != nil {
-			ui.header.name.SetText(s)
+func (c *chatUI) chatName(name string) {
+	queueUpdateAndDraw(c.app, func() {
+		if c.header.name != nil {
+			c.header.name.SetText(name)
 		}
 	})
 }
 
-func (ui *chatUI) msgNum(s string) {
-	queueUpdateAndDraw(ui.app, func() {
-		if ui.header.msgNumCell != nil {
-			ui.header.msgNumCell.SetText(s)
+func (c *chatUI) msgNum(num int) {
+	queueUpdateAndDraw(c.app, func() {
+		if c.header.msgNum != nil {
+			c.header.msgNum.SetText(strconv.Itoa(num))
 		}
 	})
 }
 
-func (ui *chatUI) memberNum(s string) {
-	queueUpdateAndDraw(ui.app, func() {
-		if ui.header.memberNumCell != nil {
-			ui.header.memberNumCell.SetText(s)
+func (c *chatUI) memberNum(num int) {
+	queueUpdateAndDraw(c.app, func() {
+		if c.header.memberNum != nil {
+			c.header.memberNum.SetText(strconv.Itoa(num))
 		}
 	})
 }
