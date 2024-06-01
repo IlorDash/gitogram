@@ -8,3 +8,10 @@ Main idea came from my father's message - [@viordash](https://github.com/viordas
 
 Translation:
 > A git-based messenger. Just a UI wrapper over the git. Messages are comments on a commit. One repo is one group chat. Authorization is native from git. It is convenient to discuss a separate topic, aka a separate brunch. Then you can pour the discussion into the general chat. Or throw it out by closing the chat. Or squash just a discussion digest
+
+To build:
+```
+$ make run
+```
+
+![Screenshot](gitogram.png)
