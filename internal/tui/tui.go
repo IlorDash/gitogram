@@ -74,7 +74,7 @@ func createChatLayout(app *tview.Application) *chatLayout {
 	return c
 }
 
-func createCmdList(s *screen, pages *tview.Pages) *tview.List {
+func createCmdList(s *appScreen, pages *tview.Pages) *tview.List {
 	commandList := tview.NewList()
 	commandList.SetBorder(true).SetTitle("Commands")
 	commandList.ShowSecondaryText(false)
@@ -116,25 +116,25 @@ func createLog(app *tview.Application) *logLayout {
 	return log
 }
 
-type screenLayout struct {
-	cmdList *tview.List
+type mainLayout struct {
 	logView *logLayout
 	chat    *chatLayout
+	cmds    *tview.List
 }
 
-type screen struct {
+type appScreen struct {
 	app        *tview.Application
-	layout     screenLayout
+	layout     mainLayout
 	panels     []tview.Primitive
 	focusPanel tview.Primitive
 	showModal  bool
 }
 
-func createScreenLayout(l screenLayout) *tview.Flex {
-	screenLayout := tview.NewFlex().SetDirection(tview.FlexColumn).AddItem(
+func createMainPage(l mainLayout) *tview.Flex {
+	innerLayout := tview.NewFlex().SetDirection(tview.FlexColumn).AddItem(
 		tview.NewFlex().
 			SetDirection(tview.FlexRow).
-			AddItem(l.cmdList, 0, 1, true).
+			AddItem(l.cmds, 0, 1, true).
 			AddItem(l.logView.panel, 0, 1, true),
 		0, 1, true).
 		AddItem(l.chat.panel, 0, 3, false)
@@ -145,7 +145,7 @@ func createScreenLayout(l screenLayout) *tview.Flex {
 	footer.SetTextAlign(tview.AlignCenter)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(screenLayout, 0, 20, true).
+		AddItem(innerLayout, 0, 20, true).
 		AddItem(footer, 3, 1, false)
 
 	return layout
@@ -155,7 +155,7 @@ func queueUpdateAndDraw(app *tview.Application, f func()) {
 	app.QueueUpdateDraw(f)
 }
 
-func (s *screen) chatName(name string) {
+func (s *appScreen) chatName(name string) {
 	queueUpdateAndDraw(s.app, func() {
 		h := s.layout.chat.header
 		if h.name != nil {
@@ -164,7 +164,7 @@ func (s *screen) chatName(name string) {
 	})
 }
 
-func (s *screen) msgNum(num int) {
+func (s *appScreen) msgNum(num int) {
 	queueUpdateAndDraw(s.app, func() {
 		h := s.layout.chat.header
 		if h.info.msgNum != nil {
@@ -173,7 +173,7 @@ func (s *screen) msgNum(num int) {
 	})
 }
 
-func (s *screen) memberNum(num int) {
+func (s *appScreen) memberNum(num int) {
 	queueUpdateAndDraw(s.app, func() {
 		h := s.layout.chat.header
 		if h.info.memberNum != nil {
@@ -193,7 +193,7 @@ func createModalForm(form tview.Primitive, height int, width int) tview.Primitiv
 	return modal
 }
 
-func getChat(s *screen, pages *tview.Pages) func() {
+func getChat(s *appScreen, pages *tview.Pages) func() {
 	return func() {
 		var url string
 		getChatForm := tview.NewForm()
@@ -225,17 +225,17 @@ func getChat(s *screen, pages *tview.Pages) func() {
 	}
 }
 
-func (s *screen) highlightPanel(p tview.Primitive) error {
+func (s *appScreen) highlightPanel(p tview.Primitive) error {
 
 	s.layout.chat.panel.SetBorderColor(tcell.ColorWhite)
-	s.layout.cmdList.SetBorderColor(tcell.ColorWhite)
+	s.layout.cmds.SetBorderColor(tcell.ColorWhite)
 	s.layout.logView.panel.SetBorderColor(tcell.ColorWhite)
 
 	switch p {
 	case s.layout.chat.panel:
 		s.layout.chat.panel.SetBorderColor(tcell.ColorGreen)
-	case s.layout.cmdList:
-		s.layout.cmdList.SetBorderColor(tcell.ColorGreen)
+	case s.layout.cmds:
+		s.layout.cmds.SetBorderColor(tcell.ColorGreen)
 	case s.layout.logView.panel:
 		s.layout.logView.panel.SetBorderColor(tcell.ColorGreen)
 	default:
@@ -244,7 +244,7 @@ func (s *screen) highlightPanel(p tview.Primitive) error {
 	return nil
 }
 
-func (s *screen) setFocus(i int) error {
+func (s *appScreen) setFocus(i int) error {
 	if i > len(s.panels) {
 		return errors.New("invalid screen panel")
 	}
@@ -254,7 +254,7 @@ func (s *screen) setFocus(i int) error {
 	return nil
 }
 
-func setKeyboardHandler(s *screen) {
+func setKeyboardHandler(s *appScreen) {
 	i := 1
 
 	s.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -276,35 +276,38 @@ func setKeyboardHandler(s *screen) {
 	})
 }
 
-func createApp() *tview.Application {
+var dialogue *log.Logger
 
-	s := &screen{}
-	s.app = tview.NewApplication()
-	pages := tview.NewPages()
-
-	s.layout.chat = createChatLayout(s.app)
-	s.layout.cmdList = createCmdList(s, pages)
-	s.layout.logView = createLog(s.app)
-	s.showModal = false
-
-	s.panels = []tview.Primitive{s.layout.chat.panel, s.layout.cmdList, s.layout.logView.panel}
-
-	msg := log.New(s.layout.chat.dialogue, "", log.LstdFlags)
-	msg.Println("You got mail!")
+func setOutputs(s *appScreen) {
+	dialogue = log.New(s.layout.chat.dialogue, "", log.LstdFlags)
+	dialogue.Println("You got mail!")
 	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lshortfile)
 	log.SetOutput(s.layout.logView.text)
+	log.Println("You got log")
+}
 
-	mainPageLayout := createScreenLayout(s.layout)
+func createApp() *tview.Application {
 
-	s.highlightPanel(s.layout.cmdList)
+	screen := &appScreen{}
+	screen.app = tview.NewApplication()
+	pages := tview.NewPages()
 
-	setKeyboardHandler(s)
+	screen.layout.chat = createChatLayout(screen.app)
+	screen.layout.cmds = createCmdList(screen, pages)
+	screen.layout.logView = createLog(screen.app)
+	screen.showModal = false
 
-	pages.AddPage("main", mainPageLayout, true, true)
+	screen.panels = []tview.Primitive{screen.layout.chat.panel, screen.layout.cmds, screen.layout.logView.panel}
 
-	s.app.SetRoot(pages, true)
+	setOutputs(screen)
+	mainPage := createMainPage(screen.layout)
+	screen.highlightPanel(screen.layout.cmds)
+	setKeyboardHandler(screen)
+	pages.AddPage("main", mainPage, true, true)
 
-	return s.app
+	screen.app.SetRoot(pages, true)
+
+	return screen.app
 }
 
 func Run() {
