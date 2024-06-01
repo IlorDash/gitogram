@@ -10,134 +10,75 @@ import (
 	"github.com/rivo/tview"
 )
 
-type chatHeader struct {
-	name      *tview.TextView
+type chatInfo struct {
+	table     *tview.Table
 	msgNum    *tview.TableCell
 	memberNum *tview.TableCell
 }
 
-type chatUI struct {
-	app    *tview.Application
-	panel  *tview.Flex
-	header chatHeader
-	chat   *tview.TextView
+type chatHeader struct {
+	panel *tview.Flex
+	name  *tview.TextView
+	info  chatInfo
 }
 
-func createChatUI(app *tview.Application) (c *chatUI) {
-	c = &chatUI{}
-	c.app = app
+type chatLayout struct {
+	panel    *tview.Flex
+	header   chatHeader
+	dialogue *tview.TextView
+}
+
+func createChatHeader() *chatHeader {
+	h := &chatHeader{}
+
+	h.name = tview.NewTextView()
+	h.name.SetText("Chat@")
+	h.name.SetTextAlign(tview.AlignLeft)
+
+	h.info.table = tview.NewTable()
+
+	h.info.table.SetCellSimple(0, 0, "Messages:")
+	h.info.table.GetCell(0, 0).SetAlign(tview.AlignRight)
+	h.info.msgNum = tview.NewTableCell("0")
+	h.info.table.SetCell(0, 1, h.info.msgNum)
+
+	h.info.table.SetCellSimple(1, 0, "Members:")
+	h.info.table.GetCell(1, 0).SetAlign(tview.AlignRight)
+	h.info.memberNum = tview.NewTableCell("0")
+	h.info.table.SetCell(1, 1, h.info.memberNum)
+
+	h.panel = tview.NewFlex().SetDirection(tview.FlexColumn)
+	h.panel.SetBorder(true)
+	h.panel.AddItem(h.name, 0, 1, false)
+	h.panel.AddItem(h.info.table, 0, 1, false)
+
+	return h
+}
+
+func createChatLayout(app *tview.Application) *chatLayout {
+	c := &chatLayout{}
 	c.panel = tview.NewFlex().SetDirection(tview.FlexRow)
 	c.panel.SetBorder(true)
 
-	c.header.name = tview.NewTextView()
-	c.header.name.SetText("Chat@")
-	c.header.name.SetTextAlign(tview.AlignLeft)
+	c.header = *createChatHeader()
 
-	chatInfo := tview.NewTable()
-
-	chatInfo.SetCellSimple(0, 0, "Messages:")
-	chatInfo.GetCell(0, 0).SetAlign(tview.AlignRight)
-	c.header.msgNum = tview.NewTableCell("0")
-	chatInfo.SetCell(0, 1, c.header.msgNum)
-
-	chatInfo.SetCellSimple(1, 0, "Members:")
-	chatInfo.GetCell(1, 0).SetAlign(tview.AlignRight)
-	c.header.memberNum = tview.NewTableCell("0")
-	chatInfo.SetCell(1, 1, c.header.memberNum)
-
-	chatInfoPanel := tview.NewFlex().SetDirection(tview.FlexColumn)
-	chatInfoPanel.SetBorder(true)
-	chatInfoPanel.AddItem(c.header.name, 0, 1, false)
-	chatInfoPanel.AddItem(chatInfo, 0, 1, false)
-
-	c.chat = tview.NewTextView()
-	c.chat.SetChangedFunc(func() {
+	c.dialogue = tview.NewTextView()
+	c.dialogue.SetChangedFunc(func() {
 		app.Draw()
 	})
-	c.chat.SetBorder(true)
+	c.dialogue.SetBorder(true)
 
-	c.panel.AddItem(chatInfoPanel, 5, 1, false).
-		AddItem(c.chat, 0, 1, false)
+	c.panel.AddItem(c.header.panel, 5, 1, false).
+		AddItem(c.dialogue, 0, 1, false)
 
 	return c
 }
 
-func queueUpdateAndDraw(app *tview.Application, f func()) {
-	app.QueueUpdateDraw(f)
-}
-
-func (c *chatUI) chatName(name string) {
-	queueUpdateAndDraw(c.app, func() {
-		if c.header.name != nil {
-			c.header.name.SetText(name)
-		}
-	})
-}
-
-func (c *chatUI) msgNum(num int) {
-	queueUpdateAndDraw(c.app, func() {
-		if c.header.msgNum != nil {
-			c.header.msgNum.SetText(strconv.Itoa(num))
-		}
-	})
-}
-
-func (c *chatUI) memberNum(num int) {
-	queueUpdateAndDraw(c.app, func() {
-		if c.header.memberNum != nil {
-			c.header.memberNum.SetText(strconv.Itoa(num))
-		}
-	})
-}
-
-func createModalForm(form tview.Primitive, height int, width int) tview.Primitive {
-	modal := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(form, height, 1, true).
-			AddItem(nil, 0, 1, false), width, 1, true).
-		AddItem(nil, 0, 1, false)
-	return modal
-}
-
-func getChat(s *screen, pages *tview.Pages, c *chatUI) func() {
-	return func() {
-		var url string
-		getChatForm := tview.NewForm()
-		getChatForm.AddInputField("Chat address", "", 20, nil, func(newUrl string) {
-			url = newUrl
-		})
-		getChatForm.AddButton("Get", func() {
-			go func() {
-				name, memberNum, msgNum, err := client.GetChat(url)
-				if err != nil {
-					return
-				}
-				c.chatName(name)
-				c.memberNum(memberNum)
-				c.msgNum(msgNum)
-			}()
-		})
-
-		getChatForm.AddButton("Quit", func() {
-			s.showModal = false
-			pages.SwitchToPage("main")
-			pages.RemovePage("modal")
-		})
-		getChatForm.SetButtonsAlign(tview.AlignCenter)
-		getChatForm.SetBorder(true).SetTitle("Get chat")
-		modal := createModalForm(getChatForm, 13, 55)
-		s.showModal = true
-		pages.AddPage("modal", modal, true, true)
-	}
-}
-
-func createCmdList(s *screen, pages *tview.Pages, c *chatUI) *tview.List {
+func createCmdList(s *screen, pages *tview.Pages) *tview.List {
 	commandList := tview.NewList()
 	commandList.SetBorder(true).SetTitle("Commands")
 	commandList.ShowSecondaryText(false)
-	commandList.AddItem("Get chat", "", 'g', getChat(s, pages, c))
+	commandList.AddItem("Get chat", "", 'g', getChat(s, pages))
 	commandList.AddItem("Choose chat", "", 'c', func() {
 		// git.Chat
 	})
@@ -178,7 +119,7 @@ func createLog(app *tview.Application) *logLayout {
 type screenLayout struct {
 	cmdList *tview.List
 	logView *logLayout
-	chat    *tview.Flex
+	chat    *chatLayout
 }
 
 type screen struct {
@@ -196,7 +137,7 @@ func createScreenLayout(l screenLayout) *tview.Flex {
 			AddItem(l.cmdList, 0, 1, true).
 			AddItem(l.logView.panel, 0, 1, true),
 		0, 1, true).
-		AddItem(l.chat, 0, 3, false)
+		AddItem(l.chat.panel, 0, 3, false)
 
 	footer := tview.NewTextView()
 	footer.SetBorder(true)
@@ -210,15 +151,89 @@ func createScreenLayout(l screenLayout) *tview.Flex {
 	return layout
 }
 
+func queueUpdateAndDraw(app *tview.Application, f func()) {
+	app.QueueUpdateDraw(f)
+}
+
+func (s *screen) chatName(name string) {
+	queueUpdateAndDraw(s.app, func() {
+		h := s.layout.chat.header
+		if h.name != nil {
+			h.name.SetText(name)
+		}
+	})
+}
+
+func (s *screen) msgNum(num int) {
+	queueUpdateAndDraw(s.app, func() {
+		h := s.layout.chat.header
+		if h.info.msgNum != nil {
+			h.info.msgNum.SetText(strconv.Itoa(num))
+		}
+	})
+}
+
+func (s *screen) memberNum(num int) {
+	queueUpdateAndDraw(s.app, func() {
+		h := s.layout.chat.header
+		if h.info.memberNum != nil {
+			h.info.memberNum.SetText(strconv.Itoa(num))
+		}
+	})
+}
+
+func createModalForm(form tview.Primitive, height int, width int) tview.Primitive {
+	modal := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(form, height, 1, true).
+			AddItem(nil, 0, 1, false), width, 1, true).
+		AddItem(nil, 0, 1, false)
+	return modal
+}
+
+func getChat(s *screen, pages *tview.Pages) func() {
+	return func() {
+		var url string
+		getChatForm := tview.NewForm()
+		getChatForm.AddInputField("Chat address", "", 50, nil, func(newUrl string) {
+			url = newUrl
+		})
+		getChatForm.AddButton("Get", func() {
+			go func() {
+				name, memberNum, msgNum, err := client.GetChat(url)
+				if err != nil {
+					return
+				}
+				s.chatName(name)
+				s.memberNum(memberNum)
+				s.msgNum(msgNum)
+			}()
+		})
+
+		getChatForm.AddButton("Quit", func() {
+			s.showModal = false
+			pages.SwitchToPage("main")
+			pages.RemovePage("modal")
+		})
+		getChatForm.SetButtonsAlign(tview.AlignCenter)
+		getChatForm.SetBorder(true).SetTitle("Get chat")
+		modal := createModalForm(getChatForm, 13, 70)
+		s.showModal = true
+		pages.AddPage("modal", modal, true, true)
+	}
+}
+
 func (s *screen) highlightPanel(p tview.Primitive) error {
 
-	s.layout.chat.SetBorderColor(tcell.ColorWhite)
+	s.layout.chat.panel.SetBorderColor(tcell.ColorWhite)
 	s.layout.cmdList.SetBorderColor(tcell.ColorWhite)
 	s.layout.logView.panel.SetBorderColor(tcell.ColorWhite)
 
 	switch p {
-	case s.layout.chat:
-		s.layout.chat.SetBorderColor(tcell.ColorGreen)
+	case s.layout.chat.panel:
+		s.layout.chat.panel.SetBorderColor(tcell.ColorGreen)
 	case s.layout.cmdList:
 		s.layout.cmdList.SetBorderColor(tcell.ColorGreen)
 	case s.layout.logView.panel:
@@ -267,16 +282,14 @@ func createApp() *tview.Application {
 	s.app = tview.NewApplication()
 	pages := tview.NewPages()
 
-	chatUI := createChatUI(s.app)
-
-	s.layout.chat = chatUI.panel
-	s.layout.cmdList = createCmdList(s, pages, chatUI)
+	s.layout.chat = createChatLayout(s.app)
+	s.layout.cmdList = createCmdList(s, pages)
 	s.layout.logView = createLog(s.app)
 	s.showModal = false
 
-	s.panels = []tview.Primitive{s.layout.chat, s.layout.cmdList, s.layout.logView.panel}
+	s.panels = []tview.Primitive{s.layout.chat.panel, s.layout.cmdList, s.layout.logView.panel}
 
-	msg := log.New(chatUI.chat, "", log.LstdFlags)
+	msg := log.New(s.layout.chat.dialogue, "", log.LstdFlags)
 	msg.Println("You got mail!")
 	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lshortfile)
 	log.SetOutput(s.layout.logView.text)
