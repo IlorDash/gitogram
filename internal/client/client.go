@@ -129,7 +129,63 @@ func UpdateChatInfo(chat Chat) {
 	os.WriteFile(filepath.Join(path, "info.json"), chatJson, os.ModePerm)
 }
 
-func GetChat(url string) (string, int, int, error) {
+func relativeTime(t time.Time) string {
+	now := time.Now()
+	duration := now.Sub(t)
+
+	if duration < 24*time.Hour {
+		return t.Format("15:04")
+	} else if duration < 7*24*time.Hour {
+		return t.Format("Monday")
+	} else {
+		return t.Format("02.01.2006")
+	}
+}
+
+type BriefChatInfo struct {
+	Name    string
+	LastMsg string
+	Author  string
+	MsgTime string
+}
+
+func GetBriefChatInfo(name string, r *git.Repository) (BriefChatInfo, error) {
+	ref, err := r.Head()
+	if err != nil {
+		log.Println("Error retrieving HEAD:", err)
+		return BriefChatInfo{}, err
+	}
+
+	commit, err := r.CommitObject(ref.Hash())
+	if err != nil {
+		log.Println("Error retrieving commit:", err)
+		return BriefChatInfo{}, err
+	}
+	return BriefChatInfo{Name: name,
+		LastMsg: commit.Message,
+		Author:  commit.Author.Name,
+		MsgTime: relativeTime(commit.Author.When)}, nil
+}
+
+func ChatsList() ([]BriefChatInfo, error) {
+	var chatsInfo []BriefChatInfo
+	for _, chat := range Chats {
+		repo, err := git.PlainOpen(GetPath(chat.Url.String()))
+		if err != nil {
+			return nil, err
+		}
+
+		info, err := GetBriefChatInfo(chat.Name, repo)
+		if err != nil {
+			log.Println("Error retrivieng brief info", err)
+			return []BriefChatInfo{}, err
+		}
+		chatsInfo = append(chatsInfo, info)
+	}
+	return chatsInfo, nil
+}
+
+func GetChat(url string) (string, int, int, BriefChatInfo, error) {
 
 	path := GetPath(url)
 
@@ -140,24 +196,16 @@ func GetChat(url string) (string, int, int, error) {
 
 	if err != nil {
 		log.Println("Error clonning", err)
-		return "", 0, 0, err
+		return "", 0, 0, BriefChatInfo{}, err
 	}
 
-	// ... retrieving the branch being pointed by HEAD
-	ref, err := repo.Head()
+	info, err := GetBriefChatInfo(path, repo)
 	if err != nil {
-		log.Println("Error retrieving HEAD:", err)
-		return "", 0, 0, err
+		log.Println("Error retrivieng brief info", err)
+		return "", 0, 0, BriefChatInfo{}, err
 	}
 
-	// ... retrieving the commit object
-	commit, err := repo.CommitObject(ref.Hash())
-	if err != nil {
-		log.Println("Error retrieving commit:", err)
-		return "", 0, 0, err
-	}
-
-	log.Println(commit)
+	log.Printf("Clon repo %s with last msg %s at time %s\n", info.Name, info.LastMsg, info.MsgTime)
 
 	chat, err := collectChatInfo(path)
 
@@ -167,15 +215,15 @@ func GetChat(url string) (string, int, int, error) {
 		case errors.As(err, &e):
 			chat, err = createChatInfo(url, path)
 			if err != nil {
-				return "", 0, 0, err
+				return "", 0, 0, BriefChatInfo{}, err
 			}
 		default:
 			log.Println("Unexpected error during collect chat info:", err)
-			return "", 0, 0, err
+			return "", 0, 0, BriefChatInfo{}, err
 		}
 	}
 
 	Chats = append(Chats, chat)
 
-	return chat.Name, len(chat.Members), chat.MsgNum, nil
+	return chat.Name, len(chat.Members), chat.MsgNum, info, nil
 }

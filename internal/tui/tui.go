@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 
@@ -74,14 +75,31 @@ func createChatLayout(app *tview.Application) *chatLayout {
 	return c
 }
 
-func createChatList(s *appScreen, p *tview.Pages) *tview.List {
+func chatListUpperStr(n string, t string) string {
+	return fmt.Sprintf("%s %s", n, t)
+}
+func chatListBottomStr(a string, m string) string {
+	return fmt.Sprintf("%s: %s", a, m)
+}
+
+func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
+	list, err := client.ChatsList()
+	if err != nil {
+		return nil, err
+	}
+
 	chatList := tview.NewList()
 	chatList.SetBorder(true).SetTitle("Chats")
 	chatList.AddItem("New chat +", "", 0, connChat(s, p))
-	chatList.AddItem("FooBar", "", 0, func() { log.Println("Selected FooBar chat") })
-	chatList.AddItem("Another", "", 0, func() { log.Println("Selected Another chat") })
 
-	return chatList
+	for _, chat := range list {
+
+		chatList.AddItem(chatListUpperStr(chat.Name, chat.MsgTime),
+			chatListBottomStr(chat.Author, chat.LastMsg), 0,
+			func() { log.Printf("Selected %s chat\n", chat.Name) })
+	}
+
+	return chatList, nil
 }
 
 type logLayout struct {
@@ -162,6 +180,15 @@ func createMainPage(l mainLayout) *tview.Flex {
 	return globalLayout
 }
 
+func addNewChatToList(s *appScreen, c client.BriefChatInfo) {
+	s.app.QueueUpdateDraw(func() {
+		s.layout.chatList.AddItem(chatListUpperStr(c.Name, c.MsgTime),
+			chatListBottomStr(c.Author, c.LastMsg), 0,
+			func() { log.Printf("Selected %s chat\n", c.Name) })
+	})
+
+}
+
 func queueUpdateAndDraw(app *tview.Application, f func()) {
 	app.QueueUpdateDraw(f)
 }
@@ -213,10 +240,11 @@ func connChat(s *appScreen, p *tview.Pages) func() {
 		})
 		getChatForm.AddButton("Get", func() {
 			go func() {
-				name, memberNum, msgNum, err := client.GetChat(url)
+				name, memberNum, msgNum, chat, err := client.GetChat(url)
 				if err != nil {
 					return
 				}
+				addNewChatToList(s, chat)
 				s.chatName(name)
 				s.memberNum(memberNum)
 				s.msgNum(msgNum)
@@ -357,13 +385,17 @@ func setOutputs(s *appScreen) {
 	log.Println("You got log")
 }
 
-func createApp() *tview.Application {
-
+func createApp() (*tview.Application, error) {
 	screen := &appScreen{}
 	screen.app = tview.NewApplication()
 	pages := tview.NewPages()
 
-	screen.layout.chatList = createChatList(screen, pages)
+	var err error
+
+	screen.layout.chatList, err = createChatList(screen, pages)
+	if err != nil {
+		return nil, err
+	}
 	screen.layout.chat = createChatLayout(screen.app)
 	screen.layout.cmds = createCommands(screen, pages)
 	screen.showModal = false
@@ -379,11 +411,15 @@ func createApp() *tview.Application {
 
 	screen.app.SetRoot(pages, true)
 
-	return screen.app
+	return screen.app, nil
 }
 
 func Run() {
-	app := createApp()
+	app, err := createApp()
+
+	if err != nil {
+		panic(err)
+	}
 
 	if err := app.Run(); err != nil {
 		panic(err)
