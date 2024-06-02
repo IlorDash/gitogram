@@ -138,21 +138,19 @@ func createLog(s *appScreen, p *tview.Pages) *logLayout {
 		p.SwitchToPage("main")
 		s.currPage, _ = p.GetFrontPage()
 	})
-	log.button.SetBorder(true).SetRect(0, 0, 22, 3)
-	spacer := tview.NewBox()
-	emptyBox := tview.NewBox()
+	log.button.SetBorder(true)
 
-	buttonRow := tview.NewFlex().
-		AddItem(emptyBox, 0, 1, false).
-		AddItem(log.button, 22, 1, false).
-		AddItem(emptyBox, 0, 1, false)
+	buttonRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(tview.NewBox(), 0, 6, false).
+		AddItem(log.button, 0, 2, false).
+		AddItem(tview.NewBox(), 0, 6, false)
 
 	log.panel = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(log.text, 0, 3, true).
-		AddItem(spacer, 0, 1, false).
+		AddItem(log.text, 0, 10, true).
 		AddItem(buttonRow, 0, 1, false)
 	log.panel.SetBorder(true).SetTitle("Logs")
+
 	return log
 }
 
