@@ -75,8 +75,8 @@ func createChatInfo(urlS string, chatPath string) (Chat, error) {
 		return Chat{}, err
 	}
 
-	mem := chatMember{Username: username, VisibleName: username, Activity: time.Now()}
-	memArr := []chatMember{mem}
+	member := chatMember{Username: username, VisibleName: username, Activity: time.Now()}
+	memArr := []chatMember{member}
 
 	chat := Chat{Url: u, Name: chatPath, Members: memArr, MsgNum: 0}
 	chatJsonByte, _ := json.Marshal(chat)
