@@ -54,7 +54,6 @@ func getUserName() (string, error) {
 }
 
 func createChatInfo(urlS string, chatPath string) (Chat, error) {
-
 	f, err := os.Create(filepath.Join(chatPath, "info.json"))
 	if err != nil {
 		log.Println("Error creating chat info file:", err)
@@ -167,7 +166,7 @@ func GetBriefChatInfo(name string, r *git.Repository) (BriefChatInfo, error) {
 		MsgTime: relativeTime(commit.Author.When)}, nil
 }
 
-func ChatsList() ([]BriefChatInfo, error) {
+func ListChats() ([]BriefChatInfo, error) {
 	var chatsInfo []BriefChatInfo
 	for _, chat := range Chats {
 		repo, err := git.PlainOpen(GetPath(chat.Url.String()))
@@ -186,7 +185,6 @@ func ChatsList() ([]BriefChatInfo, error) {
 }
 
 func GetChat(url string) (string, int, int, BriefChatInfo, error) {
-
 	path := GetPath(url)
 
 	repo, err := git.PlainClone(path, false, &git.CloneOptions{

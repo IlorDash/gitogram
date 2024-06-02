@@ -83,7 +83,7 @@ func chatListBottomStr(a string, m string) string {
 }
 
 func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
-	list, err := client.ChatsList()
+	list, err := client.ListChats()
 	if err != nil {
 		return nil, err
 	}
