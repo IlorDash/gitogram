@@ -184,9 +184,23 @@ func GetPath(url string) string {
 func UpdateChatInfo(chat Chat) error {
 	chatJson, _ := json.Marshal(chat)
 	path := GetPath(chat.Url.Path)
-	err := os.WriteFile(filepath.Join(path, infoFileName), chatJson, os.ModePerm)
+
+	chatPath := filepath.Join(path, infoFileName)
+
+	f, err := os.OpenFile(chatPath, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		logErr(err, "updating %s", infoFileName)
+		if os.IsNotExist(err) {
+			logErr(err, "%s does not exist", chatPath)
+			return err
+		}
+		logErr(err, "opening %s", chatPath)
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.Write(chatJson)
+	if err != nil {
+		logErr(err, "writing to %s", chatPath)
 		return err
 	}
 	return nil
