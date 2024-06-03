@@ -431,7 +431,7 @@ var dialogue *log.Logger
 func setOutputs(s *appScreen) {
 	dialogue = log.New(s.main.chat.dialogue, "", log.LstdFlags)
 	dialogue.Println("You got mail!")
-	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lshortfile)
+	log.SetFlags(log.LstdFlags)
 	log.SetOutput(s.log.text)
 	log.Println("You got log")
 }
