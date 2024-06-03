@@ -3,16 +3,14 @@ package client
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
-	"log"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"time"
 
+	"github.com/IlorDash/gitogram/internal/appConfig"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -33,36 +31,23 @@ type Chat struct {
 
 var Chats []Chat
 
-func logErr(err error, format string, a ...any) {
-	_, file, line, ok := runtime.Caller(1)
-	if !ok {
-		file = "unknown"
-		line = 0
-	} else {
-		file = filepath.Base(file)
-	}
-
-	prefix := fmt.Sprintf("%s:%d Error: ", file, line)
-	log.Println(prefix+fmt.Sprintf(format, a), err)
-}
-
 func getGitConfig() (*config.Config, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		logErr(err, "getting home dir")
+		appConfig.LogErr(err, "getting home dir")
 		return nil, err
 	}
 	gitConfigPath := filepath.Join(homeDir, ".gitconfig")
 
 	configData, err := os.ReadFile(gitConfigPath)
 	if err != nil {
-		logErr(err, "reading .gitconfig")
+		appConfig.LogErr(err, "reading .gitconfig")
 		return nil, err
 	}
 
 	cfg := config.NewConfig()
 	if err := cfg.Unmarshal(configData); err != nil {
-		logErr(err, "parsing .gitconfig")
+		appConfig.LogErr(err, "parsing .gitconfig")
 		return nil, err
 	}
 	return cfg, nil
@@ -91,7 +76,7 @@ const infoFileName string = "info.json"
 func collectChatInfo(chatPath string) (Chat, error) {
 	jsonFile, err := os.Open(filepath.Join(chatPath, infoFileName))
 	if err != nil {
-		logErr(err, "openning %s", infoFileName)
+		appConfig.LogErr(err, "%s", infoFileName)
 		return Chat{}, err
 	}
 	defer jsonFile.Close()
@@ -99,7 +84,7 @@ func collectChatInfo(chatPath string) (Chat, error) {
 	byteValue, err := io.ReadAll(jsonFile)
 
 	if err != nil {
-		logErr(err, "reading %s", infoFileName)
+		appConfig.LogErr(err, "reading %s", infoFileName)
 		return Chat{}, err
 	}
 
@@ -107,7 +92,7 @@ func collectChatInfo(chatPath string) (Chat, error) {
 
 	err = json.Unmarshal(byteValue, &chat)
 	if err != nil {
-		logErr(err, "unmarshalling %s", infoFileName)
+		appConfig.LogErr(err, "unmarshalling %s", infoFileName)
 		return Chat{}, err
 	}
 
@@ -117,20 +102,20 @@ func collectChatInfo(chatPath string) (Chat, error) {
 func commit(repoPath string, fileName string, msg string) (*git.Repository, error) {
 	r, err := git.PlainOpen(repoPath)
 	if err != nil {
-		logErr(err, "openning repo %s", repoPath)
+		appConfig.LogErr(err, "openning repo %s", repoPath)
 		return nil, err
 	}
 
 	w, err := r.Worktree()
 	if err != nil {
-		logErr(err, "retrieving worktree")
+		appConfig.LogErr(err, "retrieving worktree")
 		return nil, err
 	}
 
 	if fileName != "" {
 		_, err = w.Add(fileName)
 		if err != nil {
-			logErr(err, "staging %s", fileName)
+			appConfig.LogErr(err, "staging %s", fileName)
 			return nil, err
 		}
 	}
@@ -154,7 +139,7 @@ func commit(repoPath string, fileName string, msg string) (*git.Repository, erro
 		AllowEmptyCommits: (fileName == ""),
 	})
 	if err != nil {
-		logErr(err, "commiting")
+		appConfig.LogErr(err, "commiting")
 		return nil, err
 	}
 
@@ -162,9 +147,12 @@ func commit(repoPath string, fileName string, msg string) (*git.Repository, erro
 }
 
 func push(r *git.Repository) error {
+	if appConfig.Debug {
+		return nil
+	}
 	err := r.Push(&git.PushOptions{})
 	if err != nil {
-		logErr(err, "pushing")
+		appConfig.LogErr(err, "pushing")
 		return err
 	}
 	return nil
@@ -174,7 +162,7 @@ func createChatInfo(urlStr string, chatPath string) (Chat, error) {
 	path := filepath.Join(chatPath, infoFileName)
 	f, err := os.Create(path)
 	if err != nil {
-		logErr(err, "creating %s", infoFileName)
+		appConfig.LogErr(err, "creating %s", infoFileName)
 		return Chat{}, err
 	}
 
@@ -182,13 +170,13 @@ func createChatInfo(urlStr string, chatPath string) (Chat, error) {
 
 	u, err := url.Parse(urlStr)
 	if err != nil {
-		logErr(err, "parsing URL: %s to string", urlStr)
+		appConfig.LogErr(err, "parsing URL: %s to string", urlStr)
 		return Chat{}, err
 	}
 
 	username, err := getUserName()
 	if err != nil {
-		logErr(err, "getting username")
+		appConfig.LogErr(err, "getting username")
 		return Chat{}, err
 	}
 
@@ -198,13 +186,13 @@ func createChatInfo(urlStr string, chatPath string) (Chat, error) {
 	chat := Chat{Url: u, Name: chatPath, Members: memArr, MsgNum: 0}
 	chatJsonByte, err := json.Marshal(chat)
 	if err != nil {
-		logErr(err, "marshalling chat")
+		appConfig.LogErr(err, "marshalling chat")
 		return Chat{}, err
 	}
 
 	_, err = f.Write(chatJsonByte)
 	if err != nil {
-		logErr(err, "writing chat JSON to %s", infoFileName)
+		appConfig.LogErr(err, "writing chat JSON to %s", infoFileName)
 		return Chat{}, err
 	}
 
@@ -243,13 +231,13 @@ func relativeTime(t time.Time) string {
 func getBriefChatInfo(name string, r *git.Repository) (BriefChatInfo, error) {
 	ref, err := r.Head()
 	if err != nil {
-		logErr(err, "retrieving HEAD")
+		appConfig.LogErr(err, "retrieving HEAD")
 		return BriefChatInfo{}, err
 	}
 
 	commit, err := r.CommitObject(ref.Hash())
 	if err != nil {
-		logErr(err, "retrieving commit")
+		appConfig.LogErr(err, "retrieving commit")
 		return BriefChatInfo{}, err
 	}
 	return BriefChatInfo{Name: name,
@@ -273,17 +261,17 @@ func UpdateChatInfo(chat Chat) error {
 	f, err := os.OpenFile(chatPath, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		if os.IsNotExist(err) {
-			logErr(err, "%s does not exist", chatPath)
+			appConfig.LogErr(err, "%s does not exist", chatPath)
 			return err
 		}
-		logErr(err, "opening %s", chatPath)
+		appConfig.LogErr(err, "opening %s", chatPath)
 		return err
 	}
 	defer f.Close()
 
 	_, err = f.Write(chatJson)
 	if err != nil {
-		logErr(err, "writing to %s", chatPath)
+		appConfig.LogErr(err, "writing to %s", chatPath)
 		return err
 	}
 
@@ -305,7 +293,7 @@ func ListChats() ([]BriefChatInfo, error) {
 		path := GetPath(chat.Url.String())
 		repo, err := git.PlainOpen(path)
 		if err != nil {
-			logErr(err, "openning repo %s", path)
+			appConfig.LogErr(err, "openning repo %s", path)
 			return nil, err
 		}
 
@@ -327,11 +315,11 @@ func GetChat(url string) (string, int, int, BriefChatInfo, error) {
 	})
 
 	if err != nil {
-		logErr(err, "clonning %s", url)
+		appConfig.LogErr(err, "clonning %s", url)
 		return "", 0, 0, BriefChatInfo{}, err
 	}
 
-	log.Println("Clon repo", repoName)
+	appConfig.LogDebug("Clon repo %s", repoName)
 
 	chat, err := collectChatInfo(repoName)
 	if err != nil {
@@ -342,10 +330,10 @@ func GetChat(url string) (string, int, int, BriefChatInfo, error) {
 			if err != nil {
 				return "", 0, 0, BriefChatInfo{}, err
 			}
-			log.Println("Create chat info file")
+			appConfig.LogDebug("Create chat info file")
 
 		default:
-			logErr(err, "unexpected during collect chat info")
+			appConfig.LogErr(err, "unexpected during collect chat info")
 			return "", 0, 0, BriefChatInfo{}, err
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"log"
 	"strconv"
 
+	"github.com/IlorDash/gitogram/internal/appConfig"
 	"github.com/IlorDash/gitogram/internal/client"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -433,7 +434,9 @@ func setOutputs(s *appScreen) {
 	dialogue.Println("You got mail!")
 	log.SetFlags(log.LstdFlags)
 	log.SetOutput(s.log.text)
-	log.Println("You got log")
+	if appConfig.Debug {
+		log.Println("You're in Debug mode")
+	}
 }
 
 func createApp() (*tview.Application, error) {

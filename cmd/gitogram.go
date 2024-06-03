@@ -1,7 +1,12 @@
 package main
 
-import "github.com/IlorDash/gitogram/internal/tui"
+import (
+	"flag"
+
+	"github.com/IlorDash/gitogram/internal/tui"
+)
 
 func main() {
+	flag.Parse()
 	tui.Run()
 }
