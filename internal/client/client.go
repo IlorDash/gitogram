@@ -226,9 +226,9 @@ func ListChats() ([]BriefChatInfo, error) {
 }
 
 func GetChat(url string) (string, int, int, BriefChatInfo, error) {
-	path := GetPath(url)
+	repoName := GetPath(url)
 
-	repo, err := git.PlainClone(path, false, &git.CloneOptions{
+	repo, err := git.PlainClone(repoName, false, &git.CloneOptions{
 		URL:               url,
 		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
 	})
@@ -238,26 +238,28 @@ func GetChat(url string) (string, int, int, BriefChatInfo, error) {
 		return "", 0, 0, BriefChatInfo{}, err
 	}
 
-	info, err := getBriefChatInfo(path, repo)
-	if err != nil {
-		return "", 0, 0, BriefChatInfo{}, err
-	}
+	log.Println("Clon repo", repoName)
 
-	log.Printf("Clon repo %s with last msg %s at time %s\n", info.Name, info.LastMsg, info.MsgTime)
-
-	chat, err := collectChatInfo(path)
+	chat, err := collectChatInfo(repoName)
 	if err != nil {
 		var e *os.PathError
 		switch {
 		case errors.As(err, &e):
-			chat, err = createChatInfo(url, path)
+			chat, err = createChatInfo(url, repoName)
 			if err != nil {
 				return "", 0, 0, BriefChatInfo{}, err
 			}
+			log.Println("Create chat info file")
+
 		default:
 			logErr(err, "unexpected during collect chat info")
 			return "", 0, 0, BriefChatInfo{}, err
 		}
+	}
+
+	info, err := getBriefChatInfo(repoName, repo)
+	if err != nil {
+		return "", 0, 0, BriefChatInfo{}, err
 	}
 
 	Chats = append(Chats, chat)
