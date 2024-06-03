@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 type chatMember struct {
@@ -45,27 +46,44 @@ func logErr(err error, format string, a ...any) {
 	log.Println(prefix+fmt.Sprintf(format, a), err)
 }
 
-func getUserName() (string, error) {
+func getGitConfig() (*config.Config, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		logErr(err, "getting home directory")
-		return "", err
+		logErr(err, "getting home dir")
+		return nil, err
 	}
 	gitConfigPath := filepath.Join(homeDir, ".gitconfig")
 
 	configData, err := os.ReadFile(gitConfigPath)
 	if err != nil {
-		logErr(err, "reading .gitconfig file")
-		return "", err
+		logErr(err, "reading .gitconfig")
+		return nil, err
 	}
 
 	cfg := config.NewConfig()
 	if err := cfg.Unmarshal(configData); err != nil {
-		logErr(err, "parsing .gitconfig file")
+		logErr(err, "parsing .gitconfig")
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func getUserName() (string, error) {
+	cfg, err := getGitConfig()
+	if err != nil {
 		return "", err
 	}
 
 	return cfg.Raw.Section("user").Option("name"), nil
+}
+
+func getUserEmail() (string, error) {
+	cfg, err := getGitConfig()
+	if err != nil {
+		return "", err
+	}
+
+	return cfg.Raw.Section("user").Option("email"), nil
 }
 
 const infoFileName string = "info.json"
@@ -96,8 +114,65 @@ func collectChatInfo(chatPath string) (Chat, error) {
 	return chat, nil
 }
 
+func commit(repoPath string, fileName string, msg string) (*git.Repository, error) {
+	r, err := git.PlainOpen(repoPath)
+	if err != nil {
+		logErr(err, "openning repo %s", repoPath)
+		return nil, err
+	}
+
+	w, err := r.Worktree()
+	if err != nil {
+		logErr(err, "retrieving worktree")
+		return nil, err
+	}
+
+	if fileName != "" {
+		_, err = w.Add(fileName)
+		if err != nil {
+			logErr(err, "staging %s", fileName)
+			return nil, err
+		}
+	}
+
+	name, err := getUserName()
+	if err != nil {
+		return nil, err
+	}
+
+	email, err := getUserEmail()
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = w.Commit(msg, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  name,
+			Email: email,
+			When:  time.Now(),
+		},
+		AllowEmptyCommits: (fileName == ""),
+	})
+	if err != nil {
+		logErr(err, "commiting")
+		return nil, err
+	}
+
+	return r, nil
+}
+
+func push(r *git.Repository) error {
+	err := r.Push(&git.PushOptions{})
+	if err != nil {
+		logErr(err, "pushing")
+		return err
+	}
+	return nil
+}
+
 func createChatInfo(urlStr string, chatPath string) (Chat, error) {
-	f, err := os.Create(filepath.Join(chatPath, infoFileName))
+	path := filepath.Join(chatPath, infoFileName)
+	f, err := os.Create(path)
 	if err != nil {
 		logErr(err, "creating %s", infoFileName)
 		return Chat{}, err
@@ -133,8 +208,16 @@ func createChatInfo(urlStr string, chatPath string) (Chat, error) {
 		return Chat{}, err
 	}
 
-	return chat, nil
+	r, err := commit(chatPath, infoFileName, "Create info.json")
+	if err != nil {
+		return Chat{}, err
+	}
+	err = push(r)
+	if err != nil {
+		return Chat{}, err
+	}
 
+	return chat, nil
 }
 
 type BriefChatInfo struct {
@@ -203,6 +286,16 @@ func UpdateChatInfo(chat Chat) error {
 		logErr(err, "writing to %s", chatPath)
 		return err
 	}
+
+	r, err := commit(path, infoFileName, "Update info.json")
+	if err != nil {
+		return err
+	}
+	err = push(r)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
