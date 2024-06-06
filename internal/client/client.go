@@ -23,10 +23,11 @@ type chatMember struct {
 }
 
 type Chat struct {
-	Url     *url.URL     `json:"url"`
-	Name    string       `json:"name"`
-	Members []chatMember `json:"members"`
-	MsgNum  int          `json:"msgNum"`
+	Url        *url.URL     `json:"url"`
+	Name       string       `json:"name"`
+	MembersNum int          `json:"membersNum"`
+	Members    []chatMember `json:"members"`
+	MsgNum     int          `json:"msgNum"`
 }
 
 var Chats []Chat
@@ -221,7 +222,7 @@ func createChatInfo(urlStr string, chatPath string) (Chat, error) {
 	member := chatMember{Username: username, VisibleName: username, Activity: time.Now()}
 	memArr := []chatMember{member}
 
-	chat := Chat{Url: u, Name: chatPath, Members: memArr, MsgNum: 0}
+	chat := Chat{Url: u, Name: chatPath, MembersNum: len(memArr), Members: memArr, MsgNum: 0}
 	chatJsonByte, err := json.Marshal(chat)
 	if err != nil {
 		appConfig.LogErr(err, "marshalling chat")
@@ -383,5 +384,5 @@ func AddChat(url string) (string, int, int, BriefChatInfo, error) {
 
 	Chats = append(Chats, chat)
 
-	return chat.Name, len(chat.Members), chat.MsgNum, info, nil
+	return chat.Name, chat.MembersNum, chat.MsgNum, info, nil
 }
