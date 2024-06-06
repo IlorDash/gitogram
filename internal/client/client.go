@@ -185,13 +185,10 @@ func commit(repoPath string, fileName string, msg string) (*git.Repository, erro
 	return r, nil
 }
 
-func push(r *git.Repository) error {
-	if appConfig.Debug {
-		return nil
-	}
-	err := r.Push(&git.PushOptions{})
+func push(r *git.Repository, opt *git.PushOptions) error {
+	err := r.Push(opt)
 	if err != nil {
-		appConfig.LogErr(err, "pushing")
+		appConfig.LogErr(err, "pushing to %s", opt.RemoteName)
 		return err
 	}
 	return nil
@@ -239,7 +236,7 @@ func createChatInfo(urlStr string, chatPath string) (Chat, error) {
 	if err != nil {
 		return Chat{}, err
 	}
-	err = push(r)
+	err = push(r, &git.PushOptions{})
 	if err != nil {
 		return Chat{}, err
 	}
@@ -314,11 +311,11 @@ func UpdateChatInfo(chat Chat) error {
 		return err
 	}
 
-	r, err := commit(path, infoFileName, "Update info.json")
+	repo, err := commit(path, infoFileName, "Update info.json")
 	if err != nil {
 		return err
 	}
-	err = push(r)
+	err = push(repo, &git.PushOptions{})
 	if err != nil {
 		return err
 	}
