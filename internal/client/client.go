@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -37,6 +38,7 @@ type Chat struct {
 }
 
 var Chats []Chat
+var currChat Chat
 
 func getGitConfig() (*config.Config, error) {
 	homeDir, err := os.UserHomeDir()
@@ -343,9 +345,9 @@ func ListChats() ([]string, []LastMsgInfo, error) {
 }
 
 func AddChat(url string) (Chat, LastMsgInfo, error) {
-	repoName := GetPath(url)
+	chatPath := GetPath(url)
 
-	repo, err := git.PlainClone(repoName, false, &git.CloneOptions{
+	repo, err := git.PlainClone(chatPath, false, &git.CloneOptions{
 		URL:               url,
 		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
 	})
@@ -355,14 +357,14 @@ func AddChat(url string) (Chat, LastMsgInfo, error) {
 		return Chat{}, LastMsgInfo{}, err
 	}
 
-	appConfig.LogDebug("Clon repo %s", repoName)
+	appConfig.LogDebug("Clon repo %s", chatPath)
 
-	chat, err := collectChatInfo(repoName)
+	chat, err := collectChatInfo(chatPath)
 	if err != nil {
 		var e *os.PathError
 		switch {
 		case errors.As(err, &e):
-			chat, err = createChatInfo(url, repoName)
+			chat, err = createChatInfo(url, chatPath)
 			if err != nil {
 				return Chat{}, LastMsgInfo{}, err
 			}
@@ -382,4 +384,41 @@ func AddChat(url string) (Chat, LastMsgInfo, error) {
 	}
 
 	return chat, lastMsg, nil
+}
+
+func SelectChat(chat Chat) error {
+	for _, c := range Chats {
+		if c.Name == chat.Name {
+			currChat = chat
+			return nil
+		}
+	}
+	return fmt.Errorf("chat %s not found", chat.Name)
+}
+
+func SendMsg(msg string) (LastMsgInfo, error) {
+	if currChat.Url == nil {
+		return LastMsgInfo{}, errors.New("missing url")
+	}
+
+	repo, err := commit(GetPath(currChat.Url.String()), "", msg)
+	if err != nil {
+		return LastMsgInfo{}, err
+	}
+	err = push(repo, &git.PushOptions{})
+	if err != nil {
+		return LastMsgInfo{}, err
+	}
+	appConfig.LogDebug("Send msg %s to %s", msg, currChat.Name)
+
+	lastMsg, err := getLastMsg(repo)
+	if err != nil {
+		return LastMsgInfo{}, err
+	}
+
+	return lastMsg, nil
+}
+
+func GetCurrChat() (Chat, error) {
+	return currChat, nil
 }

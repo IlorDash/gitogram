@@ -28,6 +28,7 @@ type chatLayout struct {
 	panel    *tview.Flex
 	header   chatHeader
 	dialogue *tview.TextView
+	message  *tview.InputField
 }
 
 func createChatHeader() *chatHeader {
@@ -57,7 +58,16 @@ func createChatHeader() *chatHeader {
 	return h
 }
 
-func createChatLayout(app *tview.Application) *chatLayout {
+const msgTopLineColor string = "[Blue]"
+const msgBottomLineColor string = "[White]"
+
+func printMsg(author string, msg string) {
+	topLine := msgTopLineColor + author
+	bottomLine := msgBottomLineColor + msg
+	dialogue.Println(topLine + "\n" + bottomLine)
+}
+
+func createChatLayout(s *appScreen) *chatLayout {
 	c := &chatLayout{}
 	c.panel = tview.NewFlex().SetDirection(tview.FlexRow)
 	c.panel.SetBorder(true)
@@ -66,12 +76,36 @@ func createChatLayout(app *tview.Application) *chatLayout {
 
 	c.dialogue = tview.NewTextView()
 	c.dialogue.SetChangedFunc(func() {
-		app.Draw()
+		s.app.Draw()
 	})
-	c.dialogue.SetBorder(true)
+	c.dialogue.SetDynamicColors(true).SetBorder(true)
 
-	c.panel.AddItem(c.header.panel, 5, 1, false).
-		AddItem(c.dialogue, 0, 1, false)
+	var msg string
+	c.message = tview.NewInputField().
+		SetPlaceholder("Write a message...").
+		SetFieldTextColor(tcell.ColorSilver).
+		SetPlaceholderTextColor(tcell.ColorGray).
+		SetChangedFunc(func(newMsg string) {
+			msg = newMsg
+		}).
+		SetDoneFunc(func(key tcell.Key) {
+			msgInfo, err := client.SendMsg(msg)
+			if err != nil {
+				appConfig.LogErr(err, "failed to send msg")
+				return
+			}
+			chat, err := client.GetCurrChat()
+			if err != nil {
+				appConfig.LogErr(err, "failed get current Chat")
+				return
+			}
+			updCurrChatInList(s, chat, msgInfo)
+			printMsg(msgInfo.Author, msg)
+		})
+
+	c.panel.AddItem(c.header.panel, 0, 2, false).
+		AddItem(c.dialogue, 0, 8, false).
+		AddItem(c.message, 0, 1, false)
 
 	return c
 }
@@ -81,6 +115,38 @@ func chatListUpperStr(n string, t string) string {
 }
 func chatListBottomStr(a string, m string) string {
 	return fmt.Sprintf("%s: %s", a, m)
+}
+
+func selectChat(s *appScreen, chat client.Chat) {
+	s.chatName(chat.Name)
+	s.membersNum(chat.MembersNum)
+	s.msgNum(chat.MsgNum)
+	client.SelectChat(chat)
+}
+
+func addNewChatToList(s *appScreen, chat client.Chat, lastMsg client.LastMsgInfo) {
+	s.main.chatList.AddItem(chatListUpperStr(chat.Name, lastMsg.Time),
+		chatListBottomStr(lastMsg.Author, lastMsg.Msg), 0,
+		func() {
+			go func() {
+				log.Printf("Selected %s chat\n", chat.Name)
+				selectChat(s, chat)
+			}()
+		})
+}
+
+func updCurrChatInList(s *appScreen, chat client.Chat, lastMsg client.LastMsgInfo) {
+	index := s.main.chatList.GetCurrentItem()
+	s.main.chatList.RemoveItem(index)
+
+	s.main.chatList.InsertItem(index, chatListUpperStr(chat.Name, lastMsg.Time),
+		chatListBottomStr(lastMsg.Author, lastMsg.Msg), 0,
+		func() {
+			go func() {
+				log.Printf("Selected %s chat\n", chat.Name)
+				selectChat(s, chat)
+			}()
+		})
 }
 
 func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
@@ -154,6 +220,8 @@ func createLog(s *appScreen, p *tview.Pages) *logLayout {
 	return log
 }
 
+const msgFocusNum int = 2
+
 type mainLayout struct {
 	panel    *tview.Flex
 	chatList *tview.List
@@ -170,7 +238,7 @@ func createMain(s *appScreen, p *tview.Pages) (*mainLayout, error) {
 	if err != nil {
 		return nil, err
 	}
-	main.chat = createChatLayout(s.app)
+	main.chat = createChatLayout(s)
 	main.cmds = createCommands(s, p)
 
 	innerLayout := tview.NewFlex().SetDirection(tview.FlexColumn).
@@ -193,15 +261,6 @@ type appScreen struct {
 	log       *logLayout
 	showModal bool
 	currPage  string
-}
-
-func addNewChatToList(s *appScreen, chatName string, lastMsg client.LastMsgInfo) {
-	s.app.QueueUpdateDraw(func() {
-		s.main.chatList.AddItem(chatListUpperStr(chatName, lastMsg.Time),
-			chatListBottomStr(lastMsg.Author, lastMsg.Msg), 0,
-			func() { log.Printf("Selected %s chat\n", chatName) })
-	})
-
 }
 
 func queueUpdateAndDraw(app *tview.Application, f func()) {
@@ -259,10 +318,9 @@ func addChat(s *appScreen, p *tview.Pages) func() {
 				if err != nil {
 					return
 				}
-				addNewChatToList(s, chat.Name, lastMsg)
-				s.chatName(chat.Name)
-				s.membersNum(chat.MembersNum)
-				s.msgNum(chat.MsgNum)
+				s.app.QueueUpdateDraw(func() {
+					addNewChatToList(s, chat, lastMsg)
+				})
 			}()
 		})
 
@@ -298,13 +356,16 @@ func (l *logLayout) highlightPanel(p tview.Primitive) error {
 func (m *mainLayout) highlightPanel(p tview.Primitive) error {
 
 	m.chatList.SetBorderColor(tcell.ColorWhite)
-	m.chat.panel.SetBorderColor(tcell.ColorWhite)
+	m.chat.dialogue.SetBorderColor(tcell.ColorWhite)
+	m.chat.message.SetPlaceholderTextColor(tcell.ColorGray)
 
 	switch p {
 	case m.chatList:
 		m.chatList.SetBorderColor(tcell.ColorGreen)
-	case m.chat.panel:
-		m.chat.panel.SetBorderColor(tcell.ColorGreen)
+	case m.chat.dialogue:
+		m.chat.dialogue.SetBorderColor(tcell.ColorGreen)
+	case m.chat.message:
+		m.chat.message.SetPlaceholderTextColor(tcell.ColorSilver)
 	default:
 		return errors.New("invalid panel border")
 	}
@@ -397,7 +458,7 @@ func setKeyboardHandler(s *appScreen) {
 			return cmd.f(event)
 		}
 
-		if s.currPage != "main" {
+		if (s.currPage != "main") || (s.main.focus.curr == msgFocusNum) {
 			return event
 		}
 
@@ -430,7 +491,6 @@ var dialogue *log.Logger
 
 func setOutputs(s *appScreen) {
 	dialogue = log.New(s.main.chat.dialogue, "", log.LstdFlags)
-	dialogue.Println("You got mail!")
 	log.SetFlags(log.LstdFlags)
 	log.SetOutput(s.log.text)
 	if appConfig.Debug {
@@ -450,9 +510,10 @@ func createApp() (*tview.Application, error) {
 	if err != nil {
 		return nil, err
 	}
-	screen.log = createLog(screen, pages)
 	screen.main.focus = &focusStruct{}
-	screen.main.focus.panels = []tview.Primitive{screen.main.chatList, screen.main.chat.panel}
+	screen.main.focus.panels = []tview.Primitive{screen.main.chatList, screen.main.chat.dialogue, screen.main.chat.message}
+
+	screen.log = createLog(screen, pages)
 	screen.log.focus = &focusStruct{}
 	screen.log.focus.panels = []tview.Primitive{screen.log.text, screen.log.button}
 
