@@ -34,19 +34,19 @@ func teardownTest(t *testing.T) {
 	t.Log("Removed", path)
 }
 
-func TestGetChat(t *testing.T) {
+func TestAddChat(t *testing.T) {
 	setupTest(t)
 	defer teardownTest(t)
 
 	type Res struct {
 		name   string
-		memNum string
-		msgNum string
+		memNum int
+		msgNum int
 	}
-	want := Res{name: GetPath(repoURL), memNum: "1", msgNum: "0"}
+	want := Res{name: GetPath(repoURL), memNum: 1, msgNum: 0}
 	var ans Res
 	var err error
-	ans.name, ans.memNum, ans.msgNum, err = GetChat(repoURL)
+	ans.name, ans.memNum, ans.msgNum, _, err = AddChat(repoURL)
 
 	if err != nil {
 		t.Fatalf(`GetChat(%s) err = %v`, repoURL, err)
@@ -57,11 +57,11 @@ func TestGetChat(t *testing.T) {
 	}
 
 	if ans.memNum != want.memNum {
-		t.Fatalf(`GetChat(%s) ans.memNum = %s want match %s`, repoURL, ans.memNum, want.memNum)
+		t.Fatalf(`GetChat(%s) ans.memNum = %d want match %d`, repoURL, ans.memNum, want.memNum)
 	}
 
 	if ans.msgNum != want.msgNum {
-		t.Fatalf(`GetChat(%s) ans.msgNum = %s want match %s`, repoURL, ans.msgNum, want.msgNum)
+		t.Fatalf(`GetChat(%s) ans.msgNum = %d want match %d`, repoURL, ans.msgNum, want.msgNum)
 	}
 
 }
