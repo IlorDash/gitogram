@@ -16,6 +16,12 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
+type LastMsgInfo struct {
+	Msg    string
+	Author string
+	Time   string
+}
+
 type chatMember struct {
 	Username    string    `json:"Username"`
 	VisibleName string    `json:"VisibleName"`
@@ -244,13 +250,6 @@ func createChatInfo(urlStr string, chatPath string) (Chat, error) {
 	return chat, nil
 }
 
-type BriefChatInfo struct {
-	Name    string
-	LastMsg string
-	Author  string
-	MsgTime string
-}
-
 func relativeTime(t time.Time) string {
 	now := time.Now()
 	duration := now.Sub(t)
@@ -264,22 +263,21 @@ func relativeTime(t time.Time) string {
 	}
 }
 
-func getBriefChatInfo(name string, r *git.Repository) (BriefChatInfo, error) {
+func getLastMsg(r *git.Repository) (LastMsgInfo, error) {
 	ref, err := r.Head()
 	if err != nil {
 		appConfig.LogErr(err, "retrieving HEAD")
-		return BriefChatInfo{}, err
+		return LastMsgInfo{}, err
 	}
 
 	commit, err := r.CommitObject(ref.Hash())
 	if err != nil {
 		appConfig.LogErr(err, "retrieving commit")
-		return BriefChatInfo{}, err
+		return LastMsgInfo{}, err
 	}
-	return BriefChatInfo{Name: name,
-		LastMsg: commit.Message,
-		Author:  commit.Author.Name,
-		MsgTime: relativeTime(commit.Author.When)}, nil
+	return LastMsgInfo{Msg: commit.Message,
+		Author: commit.Author.Name,
+		Time:   relativeTime(commit.Author.When)}, nil
 }
 
 func GetPath(url string) string {
@@ -323,26 +321,28 @@ func UpdateChatInfo(chat Chat) error {
 	return nil
 }
 
-func ListChats() ([]BriefChatInfo, error) {
-	var chatsInfo []BriefChatInfo
+func ListChats() ([]string, []LastMsgInfo, error) {
+	var lastMsgArr []LastMsgInfo
+	var chatNames []string
 	for _, chat := range Chats {
 		path := GetPath(chat.Url.String())
 		repo, err := git.PlainOpen(path)
 		if err != nil {
 			appConfig.LogErr(err, "openning repo %s", path)
-			return nil, err
+			return nil, nil, err
 		}
 
-		info, err := getBriefChatInfo(chat.Name, repo)
+		lastMsg, err := getLastMsg(repo)
 		if err != nil {
-			return []BriefChatInfo{}, err
+			return nil, nil, err
 		}
-		chatsInfo = append(chatsInfo, info)
+		chatNames = append(chatNames, chat.Name)
+		lastMsgArr = append(lastMsgArr, lastMsg)
 	}
-	return chatsInfo, nil
+	return chatNames, lastMsgArr, nil
 }
 
-func AddChat(url string) (string, int, int, BriefChatInfo, error) {
+func AddChat(url string) (string, int, int, LastMsgInfo, error) {
 	repoName := GetPath(url)
 
 	repo, err := git.PlainClone(repoName, false, &git.CloneOptions{
@@ -352,7 +352,7 @@ func AddChat(url string) (string, int, int, BriefChatInfo, error) {
 
 	if err != nil {
 		appConfig.LogErr(err, "clonning %s", url)
-		return "", 0, 0, BriefChatInfo{}, err
+		return "", 0, 0, LastMsgInfo{}, err
 	}
 
 	appConfig.LogDebug("Clon repo %s", repoName)
@@ -364,22 +364,22 @@ func AddChat(url string) (string, int, int, BriefChatInfo, error) {
 		case errors.As(err, &e):
 			chat, err = createChatInfo(url, repoName)
 			if err != nil {
-				return "", 0, 0, BriefChatInfo{}, err
+				return "", 0, 0, LastMsgInfo{}, err
 			}
 			appConfig.LogDebug("Create chat info file")
 
 		default:
 			appConfig.LogErr(err, "unexpected during collect chat info")
-			return "", 0, 0, BriefChatInfo{}, err
+			return "", 0, 0, LastMsgInfo{}, err
 		}
-	}
-
-	info, err := getBriefChatInfo(repoName, repo)
-	if err != nil {
-		return "", 0, 0, BriefChatInfo{}, err
 	}
 
 	Chats = append(Chats, chat)
 
-	return chat.Name, chat.MembersNum, chat.MsgNum, info, nil
+	lastMsg, err := getLastMsg(repo)
+	if err != nil {
+		return "", 0, 0, LastMsgInfo{}, err
+	}
+
+	return chat.Name, chat.MembersNum, chat.MsgNum, lastMsg, nil
 }

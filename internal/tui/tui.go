@@ -84,7 +84,7 @@ func chatListBottomStr(a string, m string) string {
 }
 
 func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
-	list, err := client.ListChats()
+	chatNames, lastMsgs, err := client.ListChats()
 	if err != nil {
 		return nil, err
 	}
@@ -93,11 +93,10 @@ func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
 	chatList.SetBorder(true).SetTitle("Chats")
 	chatList.AddItem("New chat +", "", 0, addChat(s, p))
 
-	for _, chat := range list {
-
-		chatList.AddItem(chatListUpperStr(chat.Name, chat.MsgTime),
-			chatListBottomStr(chat.Author, chat.LastMsg), 0,
-			func() { log.Printf("Selected %s chat\n", chat.Name) })
+	for i := 0; i < len(chatNames) && i < len(lastMsgs); i++ {
+		chatList.AddItem(chatListUpperStr(chatNames[i], lastMsgs[i].Time),
+			chatListBottomStr(lastMsgs[i].Author, lastMsgs[i].Msg), 0,
+			func() { log.Printf("Selected %s chat\n", chatNames[i]) })
 	}
 
 	return chatList, nil
@@ -196,11 +195,11 @@ type appScreen struct {
 	currPage  string
 }
 
-func addNewChatToList(s *appScreen, c client.BriefChatInfo) {
+func addNewChatToList(s *appScreen, chatName string, lastMsg client.LastMsgInfo) {
 	s.app.QueueUpdateDraw(func() {
-		s.main.chatList.AddItem(chatListUpperStr(c.Name, c.MsgTime),
-			chatListBottomStr(c.Author, c.LastMsg), 0,
-			func() { log.Printf("Selected %s chat\n", c.Name) })
+		s.main.chatList.AddItem(chatListUpperStr(chatName, lastMsg.Time),
+			chatListBottomStr(lastMsg.Author, lastMsg.Msg), 0,
+			func() { log.Printf("Selected %s chat\n", chatName) })
 	})
 
 }
@@ -256,11 +255,11 @@ func addChat(s *appScreen, p *tview.Pages) func() {
 		})
 		getChatForm.AddButton("Add", func() {
 			go func() {
-				name, membersNum, msgNum, chat, err := client.AddChat(url)
+				name, membersNum, msgNum, lastMsg, err := client.AddChat(url)
 				if err != nil {
 					return
 				}
-				addNewChatToList(s, chat)
+				addNewChatToList(s, name, lastMsg)
 				s.chatName(name)
 				s.membersNum(membersNum)
 				s.msgNum(msgNum)
