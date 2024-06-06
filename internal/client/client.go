@@ -74,6 +74,29 @@ func getUserEmail() (string, error) {
 
 const infoFileName string = "info.json"
 
+func foundMeInMembers(chat Chat) (bool, error) {
+	name, err := getUserName()
+	if err != nil {
+		return true, err
+	}
+	for _, member := range chat.Members {
+		if name == member.Username {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func addMeToMembers(chat Chat) (Chat, error) {
+	username, err := getUserName()
+	if err != nil {
+		return Chat{}, err
+	}
+	myInfo := chatMember{Username: username, VisibleName: username, Activity: time.Now()}
+	chat.Members = append(chat.Members, myInfo)
+	return chat, nil
+}
+
 func collectChatInfo(chatPath string) (Chat, error) {
 	jsonFile, err := os.Open(filepath.Join(chatPath, infoFileName))
 	if err != nil {
@@ -94,6 +117,20 @@ func collectChatInfo(chatPath string) (Chat, error) {
 	err = json.Unmarshal(byteValue, &chat)
 	if err != nil {
 		appConfig.LogErr(err, "unmarshalling %s", infoFileName)
+		return Chat{}, err
+	}
+
+	inMembers, err := foundMeInMembers(chat)
+	if err != nil {
+		return Chat{}, err
+	}
+
+	if inMembers {
+		return chat, nil
+	}
+
+	chat, err = addMeToMembers(chat)
+	if err != nil {
 		return Chat{}, err
 	}
 
