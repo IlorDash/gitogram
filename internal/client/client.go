@@ -56,6 +56,7 @@ func getGitConfig() (*config.Config, error) {
 func getUserName() (string, error) {
 	cfg, err := getGitConfig()
 	if err != nil {
+		appConfig.LogErr(err, "getting username")
 		return "", err
 	}
 
@@ -120,7 +121,7 @@ func commit(repoPath string, fileName string, msg string) (*git.Repository, erro
 		}
 	}
 
-	name, err := getUserName()
+	username, err := getUserName()
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +133,7 @@ func commit(repoPath string, fileName string, msg string) (*git.Repository, erro
 
 	_, err = w.Commit(msg, &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  name,
+			Name:  username,
 			Email: email,
 			When:  time.Now(),
 		},
