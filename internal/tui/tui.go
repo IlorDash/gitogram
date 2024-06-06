@@ -91,7 +91,7 @@ func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
 
 	chatList := tview.NewList()
 	chatList.SetBorder(true).SetTitle("Chats")
-	chatList.AddItem("New chat +", "", 0, connChat(s, p))
+	chatList.AddItem("New chat +", "", 0, addChat(s, p))
 
 	for _, chat := range list {
 
@@ -241,22 +241,22 @@ func createModalForm(form tview.Primitive, height int, width int) tview.Primitiv
 		AddItem(nil, 0, 1, false).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
-			AddItem(form, height, 1, true).
+			AddItem(form, height, 10, true).
 			AddItem(nil, 0, 1, false), width, 1, true).
 		AddItem(nil, 0, 1, false)
 	return modal
 }
 
-func connChat(s *appScreen, p *tview.Pages) func() {
+func addChat(s *appScreen, p *tview.Pages) func() {
 	return func() {
 		var url string
 		getChatForm := tview.NewForm()
 		getChatForm.AddInputField("Chat address", "", 50, nil, func(newUrl string) {
 			url = newUrl
 		})
-		getChatForm.AddButton("Get", func() {
+		getChatForm.AddButton("Add", func() {
 			go func() {
-				name, memberNum, msgNum, chat, err := client.GetChat(url)
+				name, memberNum, msgNum, chat, err := client.AddChat(url)
 				if err != nil {
 					return
 				}
@@ -273,8 +273,8 @@ func connChat(s *appScreen, p *tview.Pages) func() {
 			p.RemovePage("modal")
 		})
 		getChatForm.SetButtonsAlign(tview.AlignCenter)
-		getChatForm.SetBorder(true).SetTitle("Get chat")
-		modal := createModalForm(getChatForm, 13, 70)
+		getChatForm.SetBorder(true).SetTitle("Add Chat")
+		modal := createModalForm(getChatForm, 7, 70)
 		s.showModal = true
 		p.AddPage("modal", modal, true, true)
 	}

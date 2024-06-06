@@ -246,7 +246,7 @@ func getBriefChatInfo(name string, r *git.Repository) (BriefChatInfo, error) {
 		MsgTime: relativeTime(commit.Author.When)}, nil
 }
 
-func getPath(url string) string {
+func GetPath(url string) string {
 	re := regexp.MustCompile(`\/([a-zA-Z0-9-]+)\.git`)
 	match := re.FindStringSubmatch(url)
 	return match[1]
@@ -254,7 +254,7 @@ func getPath(url string) string {
 
 func UpdateChatInfo(chat Chat) error {
 	chatJson, _ := json.Marshal(chat)
-	path := getPath(chat.Url.Path)
+	path := GetPath(chat.Url.Path)
 
 	chatPath := filepath.Join(path, infoFileName)
 
@@ -290,7 +290,7 @@ func UpdateChatInfo(chat Chat) error {
 func ListChats() ([]BriefChatInfo, error) {
 	var chatsInfo []BriefChatInfo
 	for _, chat := range Chats {
-		path := getPath(chat.Url.String())
+		path := GetPath(chat.Url.String())
 		repo, err := git.PlainOpen(path)
 		if err != nil {
 			appConfig.LogErr(err, "openning repo %s", path)
@@ -306,8 +306,8 @@ func ListChats() ([]BriefChatInfo, error) {
 	return chatsInfo, nil
 }
 
-func GetChat(url string) (string, int, int, BriefChatInfo, error) {
-	repoName := getPath(url)
+func AddChat(url string) (string, int, int, BriefChatInfo, error) {
+	repoName := GetPath(url)
 
 	repo, err := git.PlainClone(repoName, false, &git.CloneOptions{
 		URL:               url,
