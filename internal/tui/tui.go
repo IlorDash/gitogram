@@ -255,14 +255,14 @@ func addChat(s *appScreen, p *tview.Pages) func() {
 		})
 		getChatForm.AddButton("Add", func() {
 			go func() {
-				name, membersNum, msgNum, lastMsg, err := client.AddChat(url)
+				chat, lastMsg, err := client.AddChat(url)
 				if err != nil {
 					return
 				}
-				addNewChatToList(s, name, lastMsg)
-				s.chatName(name)
-				s.membersNum(membersNum)
-				s.msgNum(msgNum)
+				addNewChatToList(s, chat.Name, lastMsg)
+				s.chatName(chat.Name)
+				s.membersNum(chat.MembersNum)
+				s.msgNum(chat.MsgNum)
 			}()
 		})
 

@@ -342,7 +342,7 @@ func ListChats() ([]string, []LastMsgInfo, error) {
 	return chatNames, lastMsgArr, nil
 }
 
-func AddChat(url string) (string, int, int, LastMsgInfo, error) {
+func AddChat(url string) (Chat, LastMsgInfo, error) {
 	repoName := GetPath(url)
 
 	repo, err := git.PlainClone(repoName, false, &git.CloneOptions{
@@ -352,7 +352,7 @@ func AddChat(url string) (string, int, int, LastMsgInfo, error) {
 
 	if err != nil {
 		appConfig.LogErr(err, "clonning %s", url)
-		return "", 0, 0, LastMsgInfo{}, err
+		return Chat{}, LastMsgInfo{}, err
 	}
 
 	appConfig.LogDebug("Clon repo %s", repoName)
@@ -364,13 +364,13 @@ func AddChat(url string) (string, int, int, LastMsgInfo, error) {
 		case errors.As(err, &e):
 			chat, err = createChatInfo(url, repoName)
 			if err != nil {
-				return "", 0, 0, LastMsgInfo{}, err
+				return Chat{}, LastMsgInfo{}, err
 			}
 			appConfig.LogDebug("Create chat info file")
 
 		default:
 			appConfig.LogErr(err, "unexpected during collect chat info")
-			return "", 0, 0, LastMsgInfo{}, err
+			return Chat{}, LastMsgInfo{}, err
 		}
 	}
 
@@ -378,8 +378,8 @@ func AddChat(url string) (string, int, int, LastMsgInfo, error) {
 
 	lastMsg, err := getLastMsg(repo)
 	if err != nil {
-		return "", 0, 0, LastMsgInfo{}, err
+		return Chat{}, LastMsgInfo{}, err
 	}
 
-	return chat.Name, chat.MembersNum, chat.MsgNum, lastMsg, nil
+	return chat, lastMsg, nil
 }
