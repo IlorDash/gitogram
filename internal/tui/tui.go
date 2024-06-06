@@ -13,9 +13,9 @@ import (
 )
 
 type chatInfo struct {
-	table     *tview.Table
-	msgNum    *tview.TableCell
-	memberNum *tview.TableCell
+	table      *tview.Table
+	msgNum     *tview.TableCell
+	membersNum *tview.TableCell
 }
 
 type chatHeader struct {
@@ -46,8 +46,8 @@ func createChatHeader() *chatHeader {
 
 	h.info.table.SetCellSimple(1, 0, "Members:")
 	h.info.table.GetCell(1, 0).SetAlign(tview.AlignRight)
-	h.info.memberNum = tview.NewTableCell("0")
-	h.info.table.SetCell(1, 1, h.info.memberNum)
+	h.info.membersNum = tview.NewTableCell("0")
+	h.info.table.SetCell(1, 1, h.info.membersNum)
 
 	h.panel = tview.NewFlex().SetDirection(tview.FlexColumn)
 	h.panel.SetBorder(true)
@@ -227,11 +227,11 @@ func (s *appScreen) msgNum(num int) {
 	})
 }
 
-func (s *appScreen) memberNum(num int) {
+func (s *appScreen) membersNum(num int) {
 	queueUpdateAndDraw(s.app, func() {
 		h := s.main.chat.header
-		if h.info.memberNum != nil {
-			h.info.memberNum.SetText(strconv.Itoa(num))
+		if h.info.membersNum != nil {
+			h.info.membersNum.SetText(strconv.Itoa(num))
 		}
 	})
 }
@@ -256,13 +256,13 @@ func addChat(s *appScreen, p *tview.Pages) func() {
 		})
 		getChatForm.AddButton("Add", func() {
 			go func() {
-				name, memberNum, msgNum, chat, err := client.AddChat(url)
+				name, membersNum, msgNum, chat, err := client.AddChat(url)
 				if err != nil {
 					return
 				}
 				addNewChatToList(s, chat)
 				s.chatName(name)
-				s.memberNum(memberNum)
+				s.membersNum(membersNum)
 				s.msgNum(msgNum)
 			}()
 		})

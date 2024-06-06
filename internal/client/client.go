@@ -220,9 +220,9 @@ func createChatInfo(urlStr string, chatPath string) (Chat, error) {
 	}
 
 	member := chatMember{Username: username, VisibleName: username, Activity: time.Now()}
-	memArr := []chatMember{member}
+	membersArr := []chatMember{member}
 
-	chat := Chat{Url: u, Name: chatPath, MembersNum: len(memArr), Members: memArr, MsgNum: 0}
+	chat := Chat{Url: u, Name: chatPath, MembersNum: len(membersArr), Members: membersArr, MsgNum: 0}
 	chatJsonByte, err := json.Marshal(chat)
 	if err != nil {
 		appConfig.LogErr(err, "marshalling chat")
