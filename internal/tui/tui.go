@@ -150,20 +150,20 @@ func updCurrChatInList(s *appScreen, chat client.Chat, lastMsg client.LastMsgInf
 }
 
 func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
-	chatNames, lastMsgs, err := client.ListChats()
-	if err != nil {
-		return nil, err
-	}
+	// chatNames, lastMsgs, err := client.ListChats()
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	chatList := tview.NewList()
 	chatList.SetBorder(true).SetTitle("Chats")
 	chatList.AddItem("New chat +", "", 0, addChat(s, p))
 
-	for i := 0; i < len(chatNames) && i < len(lastMsgs); i++ {
-		chatList.AddItem(chatListUpperStr(chatNames[i], lastMsgs[i].Time),
-			chatListBottomStr(lastMsgs[i].Author, lastMsgs[i].Msg), 0,
-			func() { log.Printf("Selected %s chat\n", chatNames[i]) })
-	}
+	// for i := 0; i < len(chatNames) && i < len(lastMsgs); i++ {
+	// 	chatList.AddItem(chatListUpperStr(chatNames[i], lastMsgs[i].Time),
+	// 		chatListBottomStr(lastMsgs[i].Author, lastMsgs[i].Msg), 0,
+	// 		func() { log.Printf("Selected %s chat\n", chatNames[i]) })
+	// }
 
 	return chatList, nil
 }
