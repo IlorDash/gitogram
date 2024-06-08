@@ -147,7 +147,7 @@ func updCurrChatInList(s *appScreen, chat client.Chat, lastMsg client.LastMsgInf
 }
 
 func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
-	chatNames, lastMsgs, err := client.ListChats()
+	chats, lastMsgs, err := client.CollectChats()
 	if err != nil {
 		return nil, err
 	}
@@ -156,10 +156,11 @@ func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
 	chatList.SetBorder(true).SetTitle("Chats")
 	chatList.AddItem("New chat +", "", 0, addChat(s, p))
 
-	for i := 0; i < len(chatNames) && i < len(lastMsgs); i++ {
-		chatList.AddItem(chatListUpperStr(chatNames[i], lastMsgs[i].Time),
-			chatListBottomStr(lastMsgs[i].Author, lastMsgs[i].Msg), 0,
-			func() { log.Printf("Selected %s chat\n", chatNames[i]) })
+	for i := 0; i < len(chats) && i < len(lastMsgs); i++ {
+		index := i
+		chatList.AddItem(chatListUpperStr(chats[index].Name, lastMsgs[index].Time),
+			chatListBottomStr(lastMsgs[index].Author, lastMsgs[index].Msg), 0,
+			func() { handleChatSelected(s, chats[index]) })
 	}
 
 	return chatList, nil
@@ -304,14 +305,14 @@ func createModalForm(form tview.Primitive, height int, width int) tview.Primitiv
 
 func addChat(s *appScreen, p *tview.Pages) func() {
 	return func() {
-		var url string
+		var chatUrl string
 		getChatForm := tview.NewForm()
 		getChatForm.AddInputField("Chat address", "", 50, nil, func(newUrl string) {
-			url = newUrl
+			chatUrl = newUrl
 		})
 		getChatForm.AddButton("Add", func() {
 			go func() {
-				chat, lastMsg, err := client.AddChat(url)
+				chat, lastMsg, err := client.AddChat(chatUrl)
 				if err != nil {
 					return
 				}
