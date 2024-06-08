@@ -7,7 +7,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var repoURL string
+var chatUrl string
 
 func setupTest(t *testing.T) {
 	t.Log("Setup for test")
@@ -18,18 +18,18 @@ func setupTest(t *testing.T) {
 		return
 	}
 
-	repoURL = os.Getenv("TEST_REPO_URL")
-	if repoURL == "" {
+	chatUrl = os.Getenv("TEST_REPO_URL")
+	if chatUrl == "" {
 		t.Fatalf("TEST_REPO_URL not set in environment %v", err)
 		return
 	}
 
-	t.Log("Get repository URL", repoURL)
+	t.Log("Get repository URL", chatUrl)
 }
 
 func teardownTest(t *testing.T) {
 	t.Log("Teardown for test")
-	path := GetChatPath(repoURL)
+	path := getChatPath(chatUrl)
 	os.RemoveAll(path)
 	t.Log("Removed", path)
 }
@@ -39,29 +39,29 @@ func TestAddChat(t *testing.T) {
 	defer teardownTest(t)
 
 	type Res struct {
-		name   string
-		memNum int
-		msgNum int
+		name       string
+		membersNum int
+		msgNum     int
 	}
-	want := Res{name: GetChatPath(repoURL), memNum: 1, msgNum: 0}
-	var ans Res
+	want := Res{name: getChatName(chatUrl), membersNum: 1, msgNum: 0}
+	var ans Chat
 	var err error
-	ans.name, ans.memNum, ans.msgNum, _, err = AddChat(repoURL)
+	ans, _, err = AddChat(chatUrl)
 
 	if err != nil {
-		t.Fatalf(`GetChat(%s) err = %v`, repoURL, err)
+		t.Fatalf(`GetChat(%s) err = %v`, chatUrl, err)
 	}
 
-	if ans.name != want.name {
-		t.Fatalf(`GetChat(%s) ans.name = %s want match %s`, repoURL, ans.name, want.name)
+	if ans.Name != want.name {
+		t.Fatalf(`GetChat(%s) ans.Name = %s want match %s`, chatUrl, ans.Name, want.name)
 	}
 
-	if ans.memNum != want.memNum {
-		t.Fatalf(`GetChat(%s) ans.memNum = %d want match %d`, repoURL, ans.memNum, want.memNum)
+	if ans.MembersNum != want.membersNum {
+		t.Fatalf(`GetChat(%s) ans.MembersNum = %d want match %d`, chatUrl, ans.MembersNum, want.membersNum)
 	}
 
-	if ans.msgNum != want.msgNum {
-		t.Fatalf(`GetChat(%s) ans.msgNum = %d want match %d`, repoURL, ans.msgNum, want.msgNum)
+	if ans.MsgNum != want.msgNum {
+		t.Fatalf(`GetChat(%s) ans.MsgNum = %d want match %d`, chatUrl, ans.MsgNum, want.msgNum)
 	}
 
 }
