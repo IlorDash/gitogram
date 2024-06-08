@@ -329,12 +329,17 @@ func UpdateChatInfo(chat Chat) error {
 	return nil
 }
 
+func isGitDir(dir string) bool {
+	_, err := os.Stat(dir + "/.git")
+	return err == nil
+}
+
 func CollectChats() ([]Chat, []LastMsgInfo, error) {
 	var lastMsgArr []LastMsgInfo
 	chats, _ := os.ReadDir(chatDir)
 	for _, chat := range chats {
-		if chat.IsDir() {
-			chatPath := chatDir + chat.Name()
+		chatPath := chatDir + chat.Name()
+		if chat.IsDir() && isGitDir(chatPath) {
 			c, err := collectChatInfo(chatPath)
 			if err != nil {
 				var e *os.PathError
