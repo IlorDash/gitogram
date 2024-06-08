@@ -29,7 +29,7 @@ func setupTest(t *testing.T) {
 
 func teardownTest(t *testing.T) {
 	t.Log("Teardown for test")
-	path := GetPath(repoURL)
+	path := GetChatPath(repoURL)
 	os.RemoveAll(path)
 	t.Log("Removed", path)
 }
@@ -43,7 +43,7 @@ func TestAddChat(t *testing.T) {
 		memNum int
 		msgNum int
 	}
-	want := Res{name: GetPath(repoURL), memNum: 1, msgNum: 0}
+	want := Res{name: GetChatPath(repoURL), memNum: 1, msgNum: 0}
 	var ans Res
 	var err error
 	ans.name, ans.memNum, ans.msgNum, _, err = AddChat(repoURL)

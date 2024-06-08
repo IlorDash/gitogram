@@ -282,36 +282,38 @@ func getLastMsg(r *git.Repository) (LastMsgInfo, error) {
 		Time:   relativeTime(commit.Author.When)}, nil
 }
 
-func GetPath(url string) string {
+const chatDir string = "chats/"
+
+func GetChatPath(url string) string {
 	re := regexp.MustCompile(`\/([a-zA-Z0-9-]+)\.git`)
 	match := re.FindStringSubmatch(url)
-	return match[1]
+	return chatDir + match[1]
 }
 
 func UpdateChatInfo(chat Chat) error {
 	chatJson, _ := json.Marshal(chat)
-	path := GetPath(chat.Url.Path)
+	chatPath := GetChatPath(chat.Url.Path)
 
-	chatPath := filepath.Join(path, infoFileName)
+	infoFilePath := filepath.Join(chatPath, infoFileName)
 
-	f, err := os.OpenFile(chatPath, os.O_APPEND|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(infoFilePath, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		if os.IsNotExist(err) {
-			appConfig.LogErr(err, "%s does not exist", chatPath)
+			appConfig.LogErr(err, "%s does not exist", infoFilePath)
 			return err
 		}
-		appConfig.LogErr(err, "opening %s", chatPath)
+		appConfig.LogErr(err, "opening %s", infoFilePath)
 		return err
 	}
 	defer f.Close()
 
 	_, err = f.Write(chatJson)
 	if err != nil {
-		appConfig.LogErr(err, "writing to %s", chatPath)
+		appConfig.LogErr(err, "writing to %s", infoFilePath)
 		return err
 	}
 
-	repo, err := commit(path, infoFileName, "Update info.json")
+	repo, err := commit(chatPath, infoFileName, "Update info.json")
 	if err != nil {
 		return err
 	}
@@ -345,7 +347,7 @@ func UpdateChatInfo(chat Chat) error {
 // }
 
 func AddChat(url string) (Chat, LastMsgInfo, error) {
-	chatPath := GetPath(url)
+	chatPath := GetChatPath(url)
 
 	repo, err := git.PlainClone(chatPath, false, &git.CloneOptions{
 		URL:               url,
@@ -401,7 +403,7 @@ func SendMsg(msg string) (LastMsgInfo, error) {
 		return LastMsgInfo{}, errors.New("missing url")
 	}
 
-	repo, err := commit(GetPath(currChat.Url.String()), "", msg)
+	repo, err := commit(GetChatPath(currChat.Url.String()), "", msg)
 	if err != nil {
 		return LastMsgInfo{}, err
 	}
