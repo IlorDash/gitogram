@@ -124,15 +124,17 @@ func selectChat(s *appScreen, chat client.Chat) {
 	client.SelectChat(chat)
 }
 
+func handleChatSelected(s *appScreen, c client.Chat) {
+	go func() {
+		log.Printf("Selected %s chat\n", c.Name)
+		selectChat(s, c)
+	}()
+}
+
 func addNewChatToList(s *appScreen, chat client.Chat, lastMsg client.LastMsgInfo) {
 	s.main.chatList.AddItem(chatListUpperStr(chat.Name, lastMsg.Time),
 		chatListBottomStr(lastMsg.Author, lastMsg.Msg), 0,
-		func() {
-			go func() {
-				log.Printf("Selected %s chat\n", chat.Name)
-				selectChat(s, chat)
-			}()
-		})
+		func() { handleChatSelected(s, chat) })
 }
 
 func updCurrChatInList(s *appScreen, chat client.Chat, lastMsg client.LastMsgInfo) {
@@ -141,12 +143,7 @@ func updCurrChatInList(s *appScreen, chat client.Chat, lastMsg client.LastMsgInf
 
 	s.main.chatList.InsertItem(index, chatListUpperStr(chat.Name, lastMsg.Time),
 		chatListBottomStr(lastMsg.Author, lastMsg.Msg), 0,
-		func() {
-			go func() {
-				log.Printf("Selected %s chat\n", chat.Name)
-				selectChat(s, chat)
-			}()
-		})
+		func() { handleChatSelected(s, chat) })
 }
 
 func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
