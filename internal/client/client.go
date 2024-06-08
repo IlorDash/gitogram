@@ -325,26 +325,26 @@ func UpdateChatInfo(chat Chat) error {
 	return nil
 }
 
-// func ListChats() ([]string, []LastMsgInfo, error) {
-// 	var lastMsgArr []LastMsgInfo
-// 	var chatNames []string
-// 	for _, chat := range Chats {
-// 		path := GetPath(chat.Url.String())
-// 		repo, err := git.PlainOpen(path)
-// 		if err != nil {
-// 			appConfig.LogErr(err, "openning repo %s", path)
-// 			return nil, nil, err
-// 		}
+func ListChats() ([]string, []LastMsgInfo, error) {
+	var lastMsgArr []LastMsgInfo
+	var chatNames []string
+	for _, chat := range Chats {
+		path := GetPath(chat.Url.String())
+		repo, err := git.PlainOpen(path)
+		if err != nil {
+			appConfig.LogErr(err, "openning repo %s", path)
+			return nil, nil, err
+		}
 
-// 		lastMsg, err := getLastMsg(repo)
-// 		if err != nil {
-// 			return nil, nil, err
-// 		}
-// 		chatNames = append(chatNames, chat.Name)
-// 		lastMsgArr = append(lastMsgArr, lastMsg)
-// 	}
-// 	return chatNames, lastMsgArr, nil
-// }
+		lastMsg, err := getLastMsg(repo)
+		if err != nil {
+			return nil, nil, err
+		}
+		chatNames = append(chatNames, chat.Name)
+		lastMsgArr = append(lastMsgArr, lastMsg)
+	}
+	return chatNames, lastMsgArr, nil
+}
 
 func AddChat(url string) (Chat, LastMsgInfo, error) {
 	chatPath := GetChatPath(url)
