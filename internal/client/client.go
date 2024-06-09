@@ -227,7 +227,12 @@ func createChatInfo(chatUrl string, chatPath string) (Chat, error) {
 	member := chatMember{Username: username, VisibleName: username, Activity: time.Now()}
 	membersArr := []chatMember{member}
 
-	chat := Chat{Url: u, Name: getChatName(chatUrl), MembersNum: len(membersArr), Members: membersArr, MsgNum: 0}
+	chatName, err := getChatName(chatUrl)
+	if err != nil {
+		return Chat{}, err
+	}
+
+	chat := Chat{Url: u, Name: chatName, MembersNum: len(membersArr), Members: membersArr, MsgNum: 0}
 	chatJsonByte, err := json.Marshal(chat)
 	if err != nil {
 		appConfig.LogErr(err, "marshalling chat")
@@ -282,21 +287,34 @@ func getLastMsg(r *git.Repository) (LastMsgInfo, error) {
 		Time:   relativeTime(commit.Author.When)}, nil
 }
 
-func getChatName(chatUrl string) string {
+func getChatName(chatUrl string) (string, error) {
 	re := regexp.MustCompile(`\/([a-zA-Z0-9-]+)\.git`)
 	match := re.FindStringSubmatch(chatUrl)
-	return match[1]
+	if len(match) == 0 {
+		err := errors.New("no match chat name")
+		appConfig.LogErr(err, "wrong chat URL %s", chatUrl)
+		return "", err
+	}
+	return match[1], nil
 }
 
 const chatDir string = "chats/"
 
-func getChatPath(chatUrl string) string {
-	return chatDir + getChatName(chatUrl)
+func getChatPath(chatUrl string) (string, error) {
+	chatName, err := getChatName(chatUrl)
+	if err != nil {
+		return "", err
+	}
+	return chatDir + chatName, nil
 }
 
 func UpdateChatInfo(chat Chat) error {
 	chatJson, _ := json.Marshal(chat)
-	chatPath := getChatPath(chat.Url.Path)
+
+	chatPath, err := getChatPath(chat.Url.Path)
+	if err != nil {
+		return err
+	}
 
 	infoFilePath := filepath.Join(chatPath, infoFileName)
 
@@ -370,7 +388,10 @@ func CollectChats() ([]Chat, []LastMsgInfo, error) {
 }
 
 func AddChat(chatUrl string) (Chat, LastMsgInfo, error) {
-	chatPath := getChatPath(chatUrl)
+	chatPath, err := getChatPath(chatUrl)
+	if err != nil {
+		return Chat{}, LastMsgInfo{}, err
+	}
 
 	repo, err := git.PlainClone(chatPath, false, &git.CloneOptions{
 		URL:               chatUrl,
@@ -426,7 +447,12 @@ func SendMsg(msg string) (LastMsgInfo, error) {
 		return LastMsgInfo{}, errors.New("missing url")
 	}
 
-	repo, err := commit(getChatPath(currChat.Url.String()), "", msg)
+	chatPath, err := getChatPath(currChat.Url.Path)
+	if err != nil {
+		return LastMsgInfo{}, err
+	}
+
+	repo, err := commit(chatPath, "", msg)
 	if err != nil {
 		return LastMsgInfo{}, err
 	}
