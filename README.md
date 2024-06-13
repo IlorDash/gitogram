@@ -14,15 +14,23 @@ To use Gitogram you should somewhere store your repositories, aka *chats*. You c
 
 # How to setup Gogs and configure your Git credentials
 
-> Original tutorial: [Run your own GitHub-like service with the help of Docker](https://blog.hypriot.com/post/run-your-own-github-like-service-with-docker/)
-
 1. Run Gogs in Docker:
+
+Pull image  and create a local directory for volume:
+
 ```shell
-docker run -d \
---name my-go-git-server \
+docker pull gogs/gogs
+mkdir -p /var/gogs
+```
+
+Run Docker:
+
+```shell
+docker run \
+--name=my-go-git-server \
 --publish 8022:22 \
 --publish 3000:3000 \
---volume `pwd`/gogs-data/:/data hypriot/rpi-gogs-raspbian
+-v /var/gogs:/data gogs/gogs
 ```
 
   * *name* - Docker container name.
@@ -33,8 +41,12 @@ docker run -d \
 
 	Open Gogs web interface at it's address and 3000 port. At the setup page fill this fields:
 
+	  * **Database Type** - SQLite3.
       * **Domain** - Replace *localhost* with the your IP address.
       * **Application URL** - In the predefined string, replace only *localhost* with the your IP address, e.g. http://192.168.0.170:3000/.
+
+	You can optionally setup Admin Account in Optional Settings:
+
       * **Username** - Setyour Git username.
 	  * **Password** - Set your password with at least 8 characters.
 	  * **E-mail** - Set your Git email address.
