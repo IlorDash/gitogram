@@ -117,33 +117,31 @@ func chatListBottomStr(a string, m string) string {
 	return fmt.Sprintf("%s: %s", a, m)
 }
 
-func selectChat(s *appScreen, chat client.Chat) {
-	s.chatName(chat.Name)
-	s.membersNum(chat.MembersNum)
-	s.msgNum(chat.MsgNum)
-	client.SelectChat(chat)
-}
-
 func handleChatSelected(s *appScreen, c client.Chat) {
 	go func() {
 		log.Printf("Selected %s chat\n", c.Name)
-		selectChat(s, c)
+		s.main.selectChatIndex = s.main.chatList.GetCurrentItem()
+		s.chatName(c.Name)
+		s.membersNum(c.MembersNum)
+		s.msgNum(c.MsgNum)
+		client.SelectChat(c)
 	}()
 }
 
-func addNewChatToList(s *appScreen, chat client.Chat, lastMsg client.LastMsgInfo) {
-	s.main.chatList.AddItem(chatListUpperStr(chat.Name, lastMsg.Time),
+func addNewChatToList(s *appScreen, list *tview.List, chat client.Chat, lastMsg client.LastMsgInfo) {
+	list.AddItem(chatListUpperStr(chat.Name, lastMsg.Time),
 		chatListBottomStr(lastMsg.Author, lastMsg.Msg), 0,
 		func() { handleChatSelected(s, chat) })
 }
 
 func updCurrChatInList(s *appScreen, chat client.Chat, lastMsg client.LastMsgInfo) {
-	index := s.main.chatList.GetCurrentItem()
+	index := s.main.selectChatIndex
 	s.main.chatList.RemoveItem(index)
 
 	s.main.chatList.InsertItem(index, chatListUpperStr(chat.Name, lastMsg.Time),
 		chatListBottomStr(lastMsg.Author, lastMsg.Msg), 0,
 		func() { handleChatSelected(s, chat) })
+	s.main.chatList.SetCurrentItem(index)
 }
 
 func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
@@ -158,9 +156,7 @@ func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
 
 	for i := 0; i < len(chats) && i < len(lastMsgs); i++ {
 		index := i
-		chatList.AddItem(chatListUpperStr(chats[index].Name, lastMsgs[index].Time),
-			chatListBottomStr(lastMsgs[index].Author, lastMsgs[index].Msg), 0,
-			func() { handleChatSelected(s, chats[index]) })
+		addNewChatToList(s, chatList, chats[index], lastMsgs[index])
 	}
 
 	return chatList, nil
@@ -221,11 +217,12 @@ func createLog(s *appScreen, p *tview.Pages) *logLayout {
 const msgFocusNum int = 2
 
 type mainLayout struct {
-	panel    *tview.Flex
-	chatList *tview.List
-	chat     *chatLayout
-	cmds     *tview.Flex
-	focus    *focusStruct
+	panel           *tview.Flex
+	chatList        *tview.List
+	selectChatIndex int
+	chat            *chatLayout
+	cmds            *tview.Flex
+	focus           *focusStruct
 }
 
 func createMain(s *appScreen, p *tview.Pages) (*mainLayout, error) {
@@ -236,6 +233,7 @@ func createMain(s *appScreen, p *tview.Pages) (*mainLayout, error) {
 	if err != nil {
 		return nil, err
 	}
+	main.selectChatIndex = 0
 	main.chat = createChatLayout(s)
 	main.cmds = createCommands(s, p)
 
@@ -317,7 +315,7 @@ func addChat(s *appScreen, p *tview.Pages) func() {
 					return
 				}
 				s.app.QueueUpdateDraw(func() {
-					addNewChatToList(s, chat, lastMsg)
+					addNewChatToList(s, s.main.chatList, chat, lastMsg)
 				})
 			}()
 		})
