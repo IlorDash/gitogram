@@ -18,7 +18,7 @@ import (
 )
 
 type LastMsgInfo struct {
-	Msg    string
+	Text   string
 	Author string
 	Time   string
 }
@@ -282,7 +282,7 @@ func getLastMsg(r *git.Repository) (LastMsgInfo, error) {
 		appConfig.LogErr(err, "retrieving commit")
 		return LastMsgInfo{}, err
 	}
-	return LastMsgInfo{Msg: commit.Message,
+	return LastMsgInfo{Text: commit.Message,
 		Author: commit.Author.Name,
 		Time:   relativeTime(commit.Author.When)}, nil
 }

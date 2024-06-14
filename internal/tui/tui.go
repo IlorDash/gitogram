@@ -63,7 +63,7 @@ const msgBottomLineColor string = "[White]"
 
 func printMsg(m client.LastMsgInfo) {
 	topLine := msgTopLineColor + m.Author + " " + m.Time
-	bottomLine := msgBottomLineColor + m.Msg
+	bottomLine := msgBottomLineColor + m.Text
 	dialogue.Println(topLine + "\n" + bottomLine + "\n")
 }
 
@@ -130,7 +130,7 @@ func handleChatSelected(s *appScreen, c client.Chat) {
 
 func addNewChatToList(s *appScreen, list *tview.List, chat client.Chat, lastMsg client.LastMsgInfo) {
 	list.AddItem(chatListUpperStr(chat.Name, lastMsg.Time),
-		chatListBottomStr(lastMsg.Author, lastMsg.Msg), 0,
+		chatListBottomStr(lastMsg.Author, lastMsg.Text), 0,
 		func() { handleChatSelected(s, chat) })
 }
 
@@ -139,7 +139,7 @@ func updCurrChatInList(s *appScreen, chat client.Chat, lastMsg client.LastMsgInf
 	s.main.chatList.RemoveItem(index)
 
 	s.main.chatList.InsertItem(index, chatListUpperStr(chat.Name, lastMsg.Time),
-		chatListBottomStr(lastMsg.Author, lastMsg.Msg), 0,
+		chatListBottomStr(lastMsg.Author, lastMsg.Text), 0,
 		func() { handleChatSelected(s, chat) })
 	s.main.chatList.SetCurrentItem(index)
 }
