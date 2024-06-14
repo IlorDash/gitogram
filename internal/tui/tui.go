@@ -61,10 +61,10 @@ func createChatHeader() *chatHeader {
 const msgTopLineColor string = "[Blue]"
 const msgBottomLineColor string = "[White]"
 
-func printMsg(author string, msg string) {
-	topLine := msgTopLineColor + author
-	bottomLine := msgBottomLineColor + msg
-	dialogue.Println(topLine + "\n" + bottomLine)
+func printMsg(m client.LastMsgInfo) {
+	topLine := msgTopLineColor + m.Author + " " + m.Time
+	bottomLine := msgBottomLineColor + m.Msg
+	dialogue.Println(topLine + "\n" + bottomLine + "\n")
 }
 
 func createChatLayout(s *appScreen) *chatLayout {
@@ -100,7 +100,7 @@ func createChatLayout(s *appScreen) *chatLayout {
 				return
 			}
 			updCurrChatInList(s, chat, msgInfo)
-			printMsg(msgInfo.Author, msg)
+			printMsg(msgInfo)
 		})
 
 	c.panel.AddItem(c.header.panel, 0, 2, false).
@@ -486,7 +486,7 @@ func createCommands(s *appScreen, p *tview.Pages) *tview.Flex {
 var dialogue *log.Logger
 
 func setOutputs(s *appScreen) {
-	dialogue = log.New(s.main.chat.dialogue, "", log.LstdFlags)
+	dialogue = log.New(s.main.chat.dialogue, "", 0)
 	log.SetFlags(log.LstdFlags)
 	log.SetOutput(s.log.text)
 	if appConfig.Debug {
