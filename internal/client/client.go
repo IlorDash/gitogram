@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/IlorDash/gitogram/internal/appConfig"
@@ -17,11 +18,17 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-type LastMsgInfo struct {
+type Message struct {
 	Text   string
 	Author string
-	Time   string
+	Time   time.Time
 }
+
+type MsgHandler interface {
+	Print(msg Message)
+}
+
+var msgHandler MsgHandler
 
 type chatMember struct {
 	Username    string    `json:"Username"`
@@ -38,7 +45,7 @@ type Chat struct {
 }
 
 var Chats []Chat
-var currChat Chat
+var currChat *Chat
 
 func getGitConfig() (*config.Config, error) {
 	homeDir, err := os.UserHomeDir()
@@ -146,35 +153,29 @@ func collectChatInfo(chatPath string) (Chat, error) {
 	return chat, nil
 }
 
-func commit(repoPath string, fileName string, msg string) (*git.Repository, error) {
-	r, err := git.PlainOpen(repoPath)
-	if err != nil {
-		appConfig.LogErr(err, "openning repo %s", repoPath)
-		return nil, err
-	}
-
+func commit(r *git.Repository, fileName string, msg string) error {
 	w, err := r.Worktree()
 	if err != nil {
 		appConfig.LogErr(err, "retrieving worktree")
-		return nil, err
+		return err
 	}
 
 	if fileName != "" {
 		_, err = w.Add(fileName)
 		if err != nil {
 			appConfig.LogErr(err, "staging %s", fileName)
-			return nil, err
+			return err
 		}
 	}
 
 	username, err := getUserName()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	email, err := getUserEmail()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	_, err = w.Commit(msg, &git.CommitOptions{
@@ -187,10 +188,10 @@ func commit(repoPath string, fileName string, msg string) (*git.Repository, erro
 	})
 	if err != nil {
 		appConfig.LogErr(err, "commiting")
-		return nil, err
+		return err
 	}
 
-	return r, nil
+	return nil
 }
 
 func push(r *git.Repository, opt *git.PushOptions) error {
@@ -245,11 +246,18 @@ func createChatInfo(chatUrl string, chatPath string) (Chat, error) {
 		return Chat{}, err
 	}
 
-	r, err := commit(chatPath, infoFileName, "Create info.json")
+	repo, err := git.PlainOpen(chatPath)
+	if err != nil {
+		appConfig.LogErr(err, "openning repo %s", chatPath)
+		return Chat{}, err
+	}
+
+	err = commit(repo, infoFileName, "Create info.json")
 	if err != nil {
 		return Chat{}, err
 	}
-	err = push(r, &git.PushOptions{})
+
+	err = push(repo, &git.PushOptions{})
 	if err != nil {
 		return Chat{}, err
 	}
@@ -257,34 +265,22 @@ func createChatInfo(chatUrl string, chatPath string) (Chat, error) {
 	return chat, nil
 }
 
-func relativeTime(t time.Time) string {
-	now := time.Now()
-	duration := now.Sub(t)
-
-	if duration < 24*time.Hour {
-		return t.Format("15:04")
-	} else if duration < 7*24*time.Hour {
-		return t.Format("Monday")
-	} else {
-		return t.Format("02.01.2006")
-	}
-}
-
-func getLastMsg(r *git.Repository) (LastMsgInfo, error) {
+func getLastMsg(r *git.Repository) (Message, error) {
 	ref, err := r.Head()
 	if err != nil {
 		appConfig.LogErr(err, "retrieving HEAD")
-		return LastMsgInfo{}, err
+		return Message{}, err
 	}
 
 	commit, err := r.CommitObject(ref.Hash())
 	if err != nil {
 		appConfig.LogErr(err, "retrieving commit")
-		return LastMsgInfo{}, err
+		return Message{}, err
 	}
-	return LastMsgInfo{Text: commit.Message,
+
+	return Message{Text: commit.Message,
 		Author: commit.Author.Name,
-		Time:   relativeTime(commit.Author.When)}, nil
+		Time:   commit.Author.When}, nil
 }
 
 func getChatName(chatUrl string) (string, error) {
@@ -305,6 +301,7 @@ func getChatPath(chatUrl string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return chatDir + chatName, nil
 }
 
@@ -335,10 +332,17 @@ func UpdateChatInfo(chat Chat) error {
 		return err
 	}
 
-	repo, err := commit(chatPath, infoFileName, "Update info.json")
+	repo, err := git.PlainOpen(chatPath)
+	if err != nil {
+		appConfig.LogErr(err, "openning repo %s", chatPath)
+		return err
+	}
+
+	err = commit(repo, infoFileName, "Update info.json")
 	if err != nil {
 		return err
 	}
+
 	err = push(repo, &git.PushOptions{})
 	if err != nil {
 		return err
@@ -352,8 +356,26 @@ func isGitDir(dir string) bool {
 	return err == nil
 }
 
-func CollectChats() ([]Chat, []LastMsgInfo, error) {
-	var lastMsgArr []LastMsgInfo
+func pullMsgs(r *git.Repository) error {
+	w, err := r.Worktree()
+	if err != nil {
+		appConfig.LogErr(err, "retrieving worktree")
+		return err
+	}
+
+	err = w.Pull(&git.PullOptions{RemoteName: "origin"})
+	if err != nil {
+		if err.Error() != "already up-to-date" {
+			appConfig.LogErr(err, "pulling messages")
+			return err
+		}
+	}
+
+	return nil
+}
+
+func CollectChats() ([]Chat, []Message, error) {
+	var lastMsgArr []Message
 	chats, _ := os.ReadDir(chatDir)
 	for _, chat := range chats {
 		chatPath := chatDir + chat.Name()
@@ -377,6 +399,11 @@ func CollectChats() ([]Chat, []LastMsgInfo, error) {
 				return nil, nil, err
 			}
 
+			err = pullMsgs(repo)
+			if err != nil {
+				return nil, nil, err
+			}
+
 			lastMsg, err := getLastMsg(repo)
 			if err != nil {
 				return nil, nil, err
@@ -387,10 +414,10 @@ func CollectChats() ([]Chat, []LastMsgInfo, error) {
 	return Chats, lastMsgArr, nil
 }
 
-func AddChat(chatUrl string) (Chat, LastMsgInfo, error) {
+func AddChat(chatUrl string) (Chat, Message, error) {
 	chatPath, err := getChatPath(chatUrl)
 	if err != nil {
-		return Chat{}, LastMsgInfo{}, err
+		return Chat{}, Message{}, err
 	}
 
 	repo, err := git.PlainClone(chatPath, false, &git.CloneOptions{
@@ -400,7 +427,7 @@ func AddChat(chatUrl string) (Chat, LastMsgInfo, error) {
 
 	if err != nil {
 		appConfig.LogErr(err, "clonning %s", chatUrl)
-		return Chat{}, LastMsgInfo{}, err
+		return Chat{}, Message{}, err
 	}
 
 	appConfig.LogDebug("Clon repo %s", chatPath)
@@ -412,64 +439,139 @@ func AddChat(chatUrl string) (Chat, LastMsgInfo, error) {
 		case errors.As(err, &e):
 			chat, err = createChatInfo(chatUrl, chatPath)
 			if err != nil {
-				return Chat{}, LastMsgInfo{}, err
+				return Chat{}, Message{}, err
 			}
 			appConfig.LogDebug("Create chat info file")
 
 		default:
 			appConfig.LogErr(err, "unexpected during collect chat info")
-			return Chat{}, LastMsgInfo{}, err
+			return Chat{}, Message{}, err
 		}
 	}
 
 	Chats = append(Chats, chat)
 
+	err = pullMsgs(repo)
+	if err != nil {
+		return Chat{}, Message{}, err
+	}
+
 	lastMsg, err := getLastMsg(repo)
 	if err != nil {
-		return Chat{}, LastMsgInfo{}, err
+		return Chat{}, Message{}, err
 	}
 
 	return chat, lastMsg, nil
 }
 
-func SelectChat(chat Chat) error {
+func findChatInList(chat Chat) (*Chat, error) {
 	for _, c := range Chats {
 		if c.Name == chat.Name {
-			currChat = chat
-			return nil
+			return &c, nil
 		}
+	}
+	return nil, fmt.Errorf("chat %s not found", chat.Name)
+}
+
+func printMsgs(r *git.Repository) error {
+
+	cIter, err := r.Log(&git.LogOptions{
+		All: true,
+	})
+	if err != nil {
+		return err
+	}
+
+	var commits []*object.Commit
+	err = cIter.ForEach(func(c *object.Commit) error {
+		commits = append(commits, c)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	for i := len(commits) - 1; i >= 0; i-- {
+		c := commits[i]
+		msgHandler.Print(Message{
+			Text:   strings.TrimSuffix(c.Message, "\n"),
+			Author: c.Author.Name,
+			Time:   c.Author.When,
+		})
+	}
+
+	return nil
+}
+
+func SelectChat(chat Chat) error {
+	if c, err := findChatInList(chat); err == nil {
+		currChat = c
+
+		chatPath, err := getChatPath(currChat.Url.Path)
+		if err != nil {
+			return err
+		}
+
+		repo, err := git.PlainOpen(chatPath)
+		if err != nil {
+			appConfig.LogErr(err, "openning repo %s", chatPath)
+			return err
+		}
+
+		err = printMsgs(repo)
+		if err != nil {
+			return err
+		}
+
+		return nil
 	}
 	return fmt.Errorf("chat %s not found", chat.Name)
 }
 
-func SendMsg(msg string) (LastMsgInfo, error) {
+func SendMsg(msg string) (Message, error) {
 	if currChat.Url == nil {
-		return LastMsgInfo{}, errors.New("missing url")
+		return Message{}, errors.New("missing url")
 	}
 
 	chatPath, err := getChatPath(currChat.Url.Path)
 	if err != nil {
-		return LastMsgInfo{}, err
+		return Message{}, err
 	}
 
-	repo, err := commit(chatPath, "", msg)
+	repo, err := git.PlainOpen(chatPath)
 	if err != nil {
-		return LastMsgInfo{}, err
+		appConfig.LogErr(err, "openning repo %s", chatPath)
+		return Message{}, err
 	}
+
+	err = pullMsgs(repo)
+	if err != nil {
+		return Message{}, err
+	}
+
+	err = commit(repo, "", msg)
+	if err != nil {
+		return Message{}, err
+	}
+
 	err = push(repo, &git.PushOptions{})
 	if err != nil {
-		return LastMsgInfo{}, err
+		return Message{}, err
 	}
 	appConfig.LogDebug("Send msg %s to %s", msg, currChat.Name)
 
-	lastMsg, err := getLastMsg(repo)
+	m, err := getLastMsg(repo)
 	if err != nil {
-		return LastMsgInfo{}, err
+		return Message{}, err
 	}
 
-	return lastMsg, nil
+	return m, nil
 }
 
 func GetCurrChat() (Chat, error) {
-	return currChat, nil
+	return *currChat, nil
+}
+
+func SetMessageHandler(h MsgHandler) {
+	msgHandler = h
 }

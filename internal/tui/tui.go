@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"time"
 
 	"github.com/IlorDash/gitogram/internal/appConfig"
 	"github.com/IlorDash/gitogram/internal/client"
@@ -58,15 +59,6 @@ func createChatHeader() *chatHeader {
 	return h
 }
 
-const msgTopLineColor string = "[Blue]"
-const msgBottomLineColor string = "[White]"
-
-func printMsg(m client.LastMsgInfo) {
-	topLine := msgTopLineColor + m.Author + " " + m.Time
-	bottomLine := msgBottomLineColor + m.Text
-	dialogue.Println(topLine + "\n" + bottomLine + "\n")
-}
-
 func createChatLayout(s *appScreen) *chatLayout {
 	c := &chatLayout{}
 	c.panel = tview.NewFlex().SetDirection(tview.FlexRow)
@@ -100,7 +92,7 @@ func createChatLayout(s *appScreen) *chatLayout {
 				return
 			}
 			updCurrChatInList(s, chat, msgInfo)
-			printMsg(msgInfo)
+			msgHandler.Print(msgInfo)
 		})
 
 	c.panel.AddItem(c.header.panel, 0, 2, false).
@@ -120,25 +112,35 @@ func chatListBottomStr(a string, m string) string {
 func handleChatSelected(s *appScreen, c client.Chat) {
 	go func() {
 		log.Printf("Selected %s chat\n", c.Name)
+		client.SelectChat(c)
 		s.main.selectChatIndex = s.main.chatList.GetCurrentItem()
 		s.chatName(c.Name)
 		s.membersNum(c.MembersNum)
 		s.msgNum(c.MsgNum)
-		client.SelectChat(c)
 	}()
 }
 
-func addNewChatToList(s *appScreen, list *tview.List, chat client.Chat, lastMsg client.LastMsgInfo) {
-	list.AddItem(chatListUpperStr(chat.Name, lastMsg.Time),
+func chatListRelativeTime(t time.Time) string {
+	if time.Since(t) < 24*time.Hour {
+		return t.Format("15:04")
+	} else if time.Since(t) < 7*24*time.Hour {
+		return t.Format("Monday")
+	} else {
+		return t.Format("02.01.2006")
+	}
+}
+
+func addNewChatToList(s *appScreen, list *tview.List, chat client.Chat, lastMsg client.Message) {
+	list.AddItem(chatListUpperStr(chat.Name, chatListRelativeTime(lastMsg.Time)),
 		chatListBottomStr(lastMsg.Author, lastMsg.Text), 0,
 		func() { handleChatSelected(s, chat) })
 }
 
-func updCurrChatInList(s *appScreen, chat client.Chat, lastMsg client.LastMsgInfo) {
+func updCurrChatInList(s *appScreen, chat client.Chat, lastMsg client.Message) {
 	index := s.main.selectChatIndex
 	s.main.chatList.RemoveItem(index)
 
-	s.main.chatList.InsertItem(index, chatListUpperStr(chat.Name, lastMsg.Time),
+	s.main.chatList.InsertItem(index, chatListUpperStr(chat.Name, chatListRelativeTime(lastMsg.Time)),
 		chatListBottomStr(lastMsg.Author, lastMsg.Text), 0,
 		func() { handleChatSelected(s, chat) })
 	s.main.chatList.SetCurrentItem(index)
@@ -483,7 +485,48 @@ func createCommands(s *appScreen, p *tview.Pages) *tview.Flex {
 	return cmdContainer
 }
 
+type tuiMessageHandler struct{ s *appScreen }
+
+// const msgTopLineColor string = "[Blue]"
+// const msgBottomLineColor string = "[White]"
+
 var dialogue *log.Logger
+var msgHandler client.MsgHandler
+
+func isDifferentDay(d1, d2 time.Time) bool {
+	year1, month1, day1 := d1.Date()
+	year2, month2, day2 := d2.Date()
+
+	return year1 != year2 || month1 != month2 || day1 != day2
+}
+
+var prevDate time.Time
+
+func newDate(t time.Time) bool {
+	if (prevDate == (time.Time{})) || isDifferentDay(prevDate, t) {
+		prevDate = t
+		return true
+	}
+	return false
+}
+
+func dialogueNewDate(t time.Time) string {
+	if time.Now().Year() != t.Year() {
+		return t.Format("January 2, 2006")
+	}
+	return t.Format("January 2")
+}
+
+func (h tuiMessageHandler) Print(m client.Message) {
+	if newDate(m.Time) {
+		dialogue.Println(dialogueNewDate(m.Time) + "\n")
+	}
+
+	topLine := m.Author + " " + m.Time.Format("15:04")
+	bottomLine := m.Text
+	dialogue.Println(topLine + "\n" + bottomLine + "\n")
+	h.s.main.chat.dialogue.ScrollToEnd()
+}
 
 func setOutputs(s *appScreen) {
 	dialogue = log.New(s.main.chat.dialogue, "", 0)
@@ -492,6 +535,9 @@ func setOutputs(s *appScreen) {
 	if appConfig.Debug {
 		log.Println("You're in Debug mode")
 	}
+
+	msgHandler = tuiMessageHandler{s: s}
+	client.SetMessageHandler(msgHandler)
 }
 
 func createApp() (*tview.Application, error) {
