@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/IlorDash/gitogram/internal/appConfig"
@@ -512,14 +514,31 @@ func dialogueNewDate(t time.Time) string {
 	return t.Format("January 2")
 }
 
+func borderMsg(top string, bot string) string {
+	l := max(len(top), len(bot)) + 2
+	diff := int(math.Abs(float64(len(top) - len(bot))))
+
+	if len(top) > len(bot) {
+		bot = bot + strings.Repeat(" ", diff)
+	} else {
+		top = top + strings.Repeat(" ", diff)
+	}
+
+	top = "|" + "[blue]" + top + "[white]" + "|"
+	bot = "|" + bot + "|"
+	res := fmt.Sprintf("%s\n%s\n%s\n%s\n", strings.Repeat("-", l), top, bot, strings.Repeat("-", l))
+
+	return res
+}
+
 func (h tuiMessageHandler) Print(m client.Message) {
 	if newDate(m.Time) {
 		dialogue.Println(dialogueNewDate(m.Time) + "\n")
 	}
 
-	topLine := "[blue]" + m.Author + " " + m.Time.Format("15:04") + "[white]"
+	topLine := m.Author + " " + m.Time.Format("15:04")
 	bottomLine := m.Text
-	dialogue.Println(topLine + "\n" + bottomLine + "\n")
+	dialogue.Println(borderMsg(topLine, bottomLine))
 	h.s.main.chat.dialogue.ScrollToEnd()
 }
 
