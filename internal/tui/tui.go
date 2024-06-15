@@ -336,7 +336,6 @@ func addChat(s *appScreen, p *tview.Pages) func() {
 }
 
 func (l *logLayout) highlightPanel(p tview.Primitive) error {
-
 	l.text.SetBorderColor(tcell.ColorWhite)
 	l.button.SetBorderColor(tcell.ColorWhite)
 
@@ -352,7 +351,6 @@ func (l *logLayout) highlightPanel(p tview.Primitive) error {
 }
 
 func (m *mainLayout) highlightPanel(p tview.Primitive) error {
-
 	m.chatList.SetBorderColor(tcell.ColorWhite)
 	m.chat.dialogue.SetBorderColor(tcell.ColorWhite)
 	m.chat.message.SetPlaceholderTextColor(tcell.ColorGray)
@@ -487,9 +485,6 @@ func createCommands(s *appScreen, p *tview.Pages) *tview.Flex {
 
 type tuiMessageHandler struct{ s *appScreen }
 
-// const msgTopLineColor string = "[Blue]"
-// const msgBottomLineColor string = "[White]"
-
 var dialogue *log.Logger
 var msgHandler client.MsgHandler
 
@@ -522,7 +517,7 @@ func (h tuiMessageHandler) Print(m client.Message) {
 		dialogue.Println(dialogueNewDate(m.Time) + "\n")
 	}
 
-	topLine := m.Author + " " + m.Time.Format("15:04")
+	topLine := "[blue]" + m.Author + " " + m.Time.Format("15:04") + "[white]"
 	bottomLine := m.Text
 	dialogue.Println(topLine + "\n" + bottomLine + "\n")
 	h.s.main.chat.dialogue.ScrollToEnd()
