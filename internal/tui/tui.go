@@ -125,7 +125,6 @@ func createChatLayout(s *appScreen) *chatLayout {
 				return
 			}
 			updCurrChatInList(s, chat, msgInfo)
-			msgHandler.Print(msgInfo)
 		})
 
 	c.panel.AddItem(c.header.panel, 0, 2, false).
@@ -529,7 +528,6 @@ func borderMsg(top string, bot string) string {
 type tuiMessageHandler struct{ s *appScreen }
 
 var dialogue *log.Logger
-var msgHandler client.MsgHandler
 
 func (h tuiMessageHandler) Print(m client.Message) {
 	if newDate(m.Time) {
@@ -550,8 +548,7 @@ func setOutputs(s *appScreen) {
 		log.Println("You're in Debug mode")
 	}
 
-	msgHandler = tuiMessageHandler{s: s}
-	client.SetMessageHandler(msgHandler)
+	client.SetMessageHandler(tuiMessageHandler{s: s})
 }
 
 func createApp() (*tview.Application, error) {

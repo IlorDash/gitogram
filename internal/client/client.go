@@ -566,6 +566,8 @@ func SendMsg(text string) (Message, error) {
 		return Message{}, err
 	}
 
+	msgHandler.Print(m)
+
 	return m, nil
 }
 
