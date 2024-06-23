@@ -227,7 +227,8 @@ func createLog(s *appScreen, p *tview.Pages) *logLayout {
 		p.SwitchToPage("main")
 		s.currPage, _ = p.GetFrontPage()
 	})
-	log.button.SetBorder(true)
+	log.button.SetBackgroundColorActivated(tcell.ColorGreen)
+	log.button.SetLabelColorActivated(tcell.ColorWhite)
 
 	buttonRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(tview.NewBox(), 0, 6, false).
@@ -333,13 +334,10 @@ func addChat(s *appScreen, p *tview.Pages) func() {
 
 func (l *logLayout) highlightPanel(p tview.Primitive) error {
 	l.text.SetBorderColor(tcell.ColorWhite)
-	l.button.SetBorderColor(tcell.ColorWhite)
 
 	switch p {
 	case l.text:
 		l.text.SetBorderColor(tcell.ColorGreen)
-	case l.button:
-		l.button.SetBorderColor(tcell.ColorGreen)
 	default:
 		return errors.New("invalid panel border")
 	}
