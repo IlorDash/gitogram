@@ -88,12 +88,12 @@ func getUserName() (string, error) {
 	return cfg.Raw.Section("user").Option("name"), nil
 }
 
-func foundMeInMembers(chat Chat) (bool, error) {
+func foundMeInMembers(members []chatMember) (bool, error) {
 	name, err := getUserName()
 	if err != nil {
 		return true, err
 	}
-	for _, member := range chat.Members {
+	for _, member := range members {
 		if name == member.Username {
 			return true, nil
 		}
@@ -101,14 +101,14 @@ func foundMeInMembers(chat Chat) (bool, error) {
 	return false, nil
 }
 
-func addMeToMembers(chat Chat) (Chat, error) {
+func addMeToMembers(members []chatMember) ([]chatMember, error) {
 	username, err := getUserName()
 	if err != nil {
-		return Chat{}, err
+		return members, err
 	}
-	myInfo := chatMember{Username: username, VisibleName: username, Activity: time.Now()}
-	chat.Members = append(chat.Members, myInfo)
-	return chat, nil
+	me := chatMember{Username: username, VisibleName: username, Activity: time.Now()}
+	members = append(members, me)
+	return members, nil
 }
 
 const infoFileName string = "info.json"
@@ -135,13 +135,13 @@ func collectChatInfo(chatPath string) (Chat, error) {
 		return Chat{}, err
 	}
 
-	inMembers, err := foundMeInMembers(chat)
+	inMembers, err := foundMeInMembers(chat.Members)
 	if err != nil {
 		return Chat{}, err
 	}
 
 	if !inMembers {
-		chat, err = addMeToMembers(chat)
+		chat.Members, err = addMeToMembers(chat.Members)
 		if err != nil {
 			return Chat{}, err
 		}
@@ -216,14 +216,11 @@ func createChatInfo(chatUrl string, chatPath string) (Chat, error) {
 		return Chat{}, err
 	}
 
-	username, err := getUserName()
+	var membersArr []chatMember
+	membersArr, err = addMeToMembers(membersArr)
 	if err != nil {
-		appConfig.LogErr(err, "getting username")
 		return Chat{}, err
 	}
-
-	member := chatMember{Username: username, VisibleName: username, Activity: time.Now()}
-	membersArr := []chatMember{member}
 
 	chatName, err := getChatName(chatUrl)
 	if err != nil {
