@@ -34,8 +34,8 @@ type chatLayout struct {
 	message  *tview.InputField
 }
 
-func createChatHeader() *chatHeader {
-	h := &chatHeader{}
+func createChatHeader() chatHeader {
+	h := chatHeader{}
 
 	h.name = tview.NewTextView()
 	h.name.SetText("Chat@")
@@ -61,12 +61,43 @@ func createChatHeader() *chatHeader {
 	return h
 }
 
+func queueUpdateAndDraw(app *tview.Application, f func()) {
+	app.QueueUpdateDraw(f)
+}
+
+func (s *appScreen) chatName(name string) {
+	queueUpdateAndDraw(s.app, func() {
+		h := s.main.chat.header
+		if h.name != nil {
+			h.name.SetText(name)
+		}
+	})
+}
+
+func (s *appScreen) msgNum(num int) {
+	queueUpdateAndDraw(s.app, func() {
+		h := s.main.chat.header
+		if h.info.msgNum != nil {
+			h.info.msgNum.SetText(strconv.Itoa(num))
+		}
+	})
+}
+
+func (s *appScreen) membersNum(num int) {
+	queueUpdateAndDraw(s.app, func() {
+		h := s.main.chat.header
+		if h.info.membersNum != nil {
+			h.info.membersNum.SetText(strconv.Itoa(num))
+		}
+	})
+}
+
 func createChatLayout(s *appScreen) *chatLayout {
 	c := &chatLayout{}
 	c.panel = tview.NewFlex().SetDirection(tview.FlexRow)
 	c.panel.SetBorder(true)
 
-	c.header = *createChatHeader()
+	c.header = createChatHeader()
 
 	c.dialogue = tview.NewTextView()
 	c.dialogue.SetChangedFunc(func() {
@@ -263,37 +294,6 @@ type appScreen struct {
 	currPage  string
 }
 
-func queueUpdateAndDraw(app *tview.Application, f func()) {
-	app.QueueUpdateDraw(f)
-}
-
-func (s *appScreen) chatName(name string) {
-	queueUpdateAndDraw(s.app, func() {
-		h := s.main.chat.header
-		if h.name != nil {
-			h.name.SetText(name)
-		}
-	})
-}
-
-func (s *appScreen) msgNum(num int) {
-	queueUpdateAndDraw(s.app, func() {
-		h := s.main.chat.header
-		if h.info.msgNum != nil {
-			h.info.msgNum.SetText(strconv.Itoa(num))
-		}
-	})
-}
-
-func (s *appScreen) membersNum(num int) {
-	queueUpdateAndDraw(s.app, func() {
-		h := s.main.chat.header
-		if h.info.membersNum != nil {
-			h.info.membersNum.SetText(strconv.Itoa(num))
-		}
-	})
-}
-
 func createModalForm(form tview.Primitive, height int, width int) tview.Primitive {
 	modal := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(nil, 0, 1, false).
@@ -485,11 +485,6 @@ func createCommands(s *appScreen, p *tview.Pages) *tview.Flex {
 	return cmdContainer
 }
 
-type tuiMessageHandler struct{ s *appScreen }
-
-var dialogue *log.Logger
-var msgHandler client.MsgHandler
-
 func isDifferentDay(d1, d2 time.Time) bool {
 	year1, month1, day1 := d1.Date()
 	year2, month2, day2 := d2.Date()
@@ -531,6 +526,11 @@ func borderMsg(top string, bot string) string {
 	return res
 }
 
+type tuiMessageHandler struct{ s *appScreen }
+
+var dialogue *log.Logger
+var msgHandler client.MsgHandler
+
 func (h tuiMessageHandler) Print(m client.Message) {
 	if newDate(m.Time) {
 		dialogue.Println(dialogueNewDate(m.Time) + "\n")
@@ -560,7 +560,6 @@ func createApp() (*tview.Application, error) {
 	pages := tview.NewPages()
 
 	var err error
-
 	screen.showModal = false
 	screen.main, err = createMain(screen, pages)
 	if err != nil {
