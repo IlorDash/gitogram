@@ -69,16 +69,6 @@ func getGitConfig() (*config.Config, error) {
 	return cfg, nil
 }
 
-func getUserName() (string, error) {
-	cfg, err := getGitConfig()
-	if err != nil {
-		appConfig.LogErr(err, "getting username")
-		return "", err
-	}
-
-	return cfg.Raw.Section("user").Option("name"), nil
-}
-
 func getUserEmail() (string, error) {
 	cfg, err := getGitConfig()
 	if err != nil {
@@ -88,7 +78,15 @@ func getUserEmail() (string, error) {
 	return cfg.Raw.Section("user").Option("email"), nil
 }
 
-const infoFileName string = "info.json"
+func getUserName() (string, error) {
+	cfg, err := getGitConfig()
+	if err != nil {
+		appConfig.LogErr(err, "getting username")
+		return "", err
+	}
+
+	return cfg.Raw.Section("user").Option("name"), nil
+}
 
 func foundMeInMembers(chat Chat) (bool, error) {
 	name, err := getUserName()
@@ -113,6 +111,8 @@ func addMeToMembers(chat Chat) (Chat, error) {
 	return chat, nil
 }
 
+const infoFileName string = "info.json"
+
 func collectChatInfo(chatPath string) (Chat, error) {
 	jsonFile, err := os.Open(filepath.Join(chatPath, infoFileName))
 	if err != nil {
@@ -122,7 +122,6 @@ func collectChatInfo(chatPath string) (Chat, error) {
 	defer jsonFile.Close()
 
 	byteValue, err := io.ReadAll(jsonFile)
-
 	if err != nil {
 		appConfig.LogErr(err, "reading %s", infoFileName)
 		return Chat{}, err
@@ -141,13 +140,11 @@ func collectChatInfo(chatPath string) (Chat, error) {
 		return Chat{}, err
 	}
 
-	if inMembers {
-		return chat, nil
-	}
-
-	chat, err = addMeToMembers(chat)
-	if err != nil {
-		return Chat{}, err
+	if !inMembers {
+		chat, err = addMeToMembers(chat)
+		if err != nil {
+			return Chat{}, err
+		}
 	}
 
 	return chat, nil
@@ -233,7 +230,13 @@ func createChatInfo(chatUrl string, chatPath string) (Chat, error) {
 		return Chat{}, err
 	}
 
-	chat := Chat{Url: u, Name: chatName, MembersNum: len(membersArr), Members: membersArr, MsgNum: 0}
+	chat := Chat{
+		Url:        u,
+		Name:       chatName,
+		MembersNum: len(membersArr),
+		Members:    membersArr,
+		MsgNum:     0,
+	}
 	chatJsonByte, err := json.Marshal(chat)
 	if err != nil {
 		appConfig.LogErr(err, "marshalling chat")
@@ -278,9 +281,11 @@ func getLastMsg(r *git.Repository) (Message, error) {
 		return Message{}, err
 	}
 
-	return Message{Text: commit.Message,
+	return Message{
+		Text:   commit.Message,
 		Author: commit.Author.Name,
-		Time:   commit.Author.When}, nil
+		Time:   commit.Author.When,
+	}, nil
 }
 
 func getChatName(chatUrl string) (string, error) {
@@ -474,7 +479,6 @@ func findChatInList(chat Chat) (*Chat, error) {
 }
 
 func printMsgs(r *git.Repository) error {
-
 	cIter, err := r.Log(&git.LogOptions{
 		All: true,
 	})
@@ -528,7 +532,7 @@ func SelectChat(chat Chat) error {
 	return fmt.Errorf("chat %s not found", chat.Name)
 }
 
-func SendMsg(msg string) (Message, error) {
+func SendMsg(text string) (Message, error) {
 	if currChat.Url == nil {
 		return Message{}, errors.New("missing url")
 	}
@@ -549,7 +553,7 @@ func SendMsg(msg string) (Message, error) {
 		return Message{}, err
 	}
 
-	err = commit(repo, "", msg)
+	err = commit(repo, "", text)
 	if err != nil {
 		return Message{}, err
 	}
@@ -558,7 +562,7 @@ func SendMsg(msg string) (Message, error) {
 	if err != nil {
 		return Message{}, err
 	}
-	appConfig.LogDebug("Send msg %s to %s", msg, currChat.Name)
+	appConfig.LogDebug("Send msg %s to %s", text, currChat.Name)
 
 	m, err := getLastMsg(repo)
 	if err != nil {
