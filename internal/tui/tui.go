@@ -141,17 +141,6 @@ func chatListBottomStr(a string, m string) string {
 	return fmt.Sprintf("%s: %s", a, m)
 }
 
-func handleChatSelected(s *appScreen, c client.Chat) {
-	go func() {
-		log.Printf("Selected %s chat\n", c.Name)
-		client.SelectChat(c)
-		s.main.selectChatIndex = s.main.chatList.GetCurrentItem()
-		s.chatName(c.Name)
-		s.membersNum(c.MembersNum)
-		s.msgNum(c.MsgNum)
-	}()
-}
-
 func chatListRelativeTime(t time.Time) string {
 	if time.Since(t) < 24*time.Hour {
 		return t.Format("15:04")
@@ -160,6 +149,12 @@ func chatListRelativeTime(t time.Time) string {
 	} else {
 		return t.Format("02.01.2006")
 	}
+}
+
+func handleChatSelected(s *appScreen, c client.Chat) {
+	log.Printf("Selected %s chat\n", c.Name)
+	client.SelectChat(c)
+	s.main.selectChatIndex = s.main.chatList.GetCurrentItem()
 }
 
 func addNewChatToList(s *appScreen, list *tview.List, chat client.Chat, lastMsg client.Message) {
@@ -540,6 +535,16 @@ func (h tuiMessageHandler) Print(m client.Message) {
 	h.s.main.chat.dialogue.ScrollToEnd()
 }
 
+type tuiChatHeaderHandler struct{ s *appScreen }
+
+func (h tuiChatHeaderHandler) Update(c client.ChatHeader) {
+	go func() {
+		h.s.chatName(c.Name)
+		h.s.membersNum(c.MembersNum)
+		h.s.msgNum(c.MsgNum)
+	}()
+}
+
 func setOutputs(s *appScreen) {
 	dialogue = log.New(s.main.chat.dialogue, "", 0)
 	log.SetFlags(log.LstdFlags)
@@ -549,6 +554,7 @@ func setOutputs(s *appScreen) {
 	}
 
 	client.SetMessageHandler(tuiMessageHandler{s: s})
+	client.SetChatHeaderHandler(tuiChatHeaderHandler{s: s})
 }
 
 func createApp() (*tview.Application, error) {

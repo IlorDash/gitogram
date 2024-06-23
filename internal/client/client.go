@@ -30,6 +30,18 @@ type MsgHandler interface {
 
 var msgHandler MsgHandler
 
+type ChatHeader struct {
+	Name       string
+	MembersNum int
+	MsgNum     int
+}
+
+type ChatHeaderHandler interface {
+	Update(c ChatHeader)
+}
+
+var chatHeaderHandler ChatHeaderHandler
+
 type chatMember struct {
 	Username    string    `json:"Username"`
 	VisibleName string    `json:"VisibleName"`
@@ -358,53 +370,71 @@ func isGitDir(dir string) bool {
 	return err == nil
 }
 
-func pullMsgs(r *git.Repository) error {
+func pullMsgs(r *git.Repository) (int, error) {
 	w, err := r.Worktree()
 	if err != nil {
 		appConfig.LogErr(err, "retrieving worktree")
-		return err
+		return 0, err
 	}
 
 	err = w.Pull(&git.PullOptions{RemoteName: "origin"})
 	if err != nil {
 		if err.Error() != "already up-to-date" {
 			appConfig.LogErr(err, "pulling messages")
-			return err
+			return 0, err
 		}
 	}
 
-	return nil
+	cIter, err := r.Log(&git.LogOptions{All: true})
+	if err != nil {
+		return 0, err
+	}
+
+	newMsg := 0
+
+	err = cIter.ForEach(func(c *object.Commit) error {
+		newMsg += 1
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return newMsg, nil
 }
 
 func CollectChats() ([]Chat, []Message, error) {
 	var lastMsgArr []Message
-	chats, _ := os.ReadDir(chatDir)
-	for _, chat := range chats {
-		chatPath := chatDir + chat.Name()
-		if chat.IsDir() && isGitDir(chatPath) {
-			c, err := collectChatInfo(chatPath)
+	files, _ := os.ReadDir(chatDir)
+	for _, f := range files {
+		chatPath := chatDir + f.Name()
+		if f.IsDir() && isGitDir(chatPath) {
+			chat, err := collectChatInfo(chatPath)
 			if err != nil {
 				var e *os.PathError
 				switch {
 				case errors.As(err, &e):
-					appConfig.LogErr(err, "chat %s missing info.json", chat.Name())
+					appConfig.LogErr(err, "chat %s missing info.json", f.Name())
 					continue
 				default:
 					appConfig.LogErr(err, "unexpected during collect chats")
 					return nil, nil, err
 				}
 			}
-			Chats = append(Chats, c)
+
 			repo, err := git.PlainOpen(chatPath)
 			if err != nil {
 				appConfig.LogErr(err, "openning repo %s", chatPath)
 				return nil, nil, err
 			}
 
-			err = pullMsgs(repo)
+			msgNum, err := pullMsgs(repo)
 			if err != nil {
 				return nil, nil, err
 			}
+
+			chat.MsgNum = msgNum
+			Chats = append(Chats, chat)
 
 			lastMsg, err := getLastMsg(repo)
 			if err != nil {
@@ -451,12 +481,13 @@ func AddChat(chatUrl string) (Chat, Message, error) {
 		}
 	}
 
-	Chats = append(Chats, chat)
-
-	err = pullMsgs(repo)
+	msgNum, err := pullMsgs(repo)
 	if err != nil {
 		return Chat{}, Message{}, err
 	}
+
+	chat.MsgNum = msgNum
+	Chats = append(Chats, chat)
 
 	lastMsg, err := getLastMsg(repo)
 	if err != nil {
@@ -519,6 +550,19 @@ func SelectChat(chat Chat) error {
 			return err
 		}
 
+		msgNum, err := pullMsgs(repo)
+		if err != nil {
+			return err
+		}
+
+		currChat.MsgNum = msgNum
+
+		chatHeaderHandler.Update(ChatHeader{
+			Name:       currChat.Name,
+			MembersNum: currChat.MembersNum,
+			MsgNum:     currChat.MsgNum,
+		})
+
 		err = printMsgs(repo)
 		if err != nil {
 			return err
@@ -545,10 +589,12 @@ func SendMsg(text string) (Message, error) {
 		return Message{}, err
 	}
 
-	err = pullMsgs(repo)
+	msgNum, err := pullMsgs(repo)
 	if err != nil {
 		return Message{}, err
 	}
+
+	currChat.MsgNum = msgNum
 
 	err = commit(repo, "", text)
 	if err != nil {
@@ -560,6 +606,12 @@ func SendMsg(text string) (Message, error) {
 		return Message{}, err
 	}
 	appConfig.LogDebug("Send msg %s to %s", text, currChat.Name)
+
+	currChat.MsgNum += 1
+
+	chatHeaderHandler.Update(ChatHeader{Name: currChat.Name,
+		MembersNum: currChat.MembersNum,
+		MsgNum:     currChat.MsgNum})
 
 	m, err := getLastMsg(repo)
 	if err != nil {
@@ -577,4 +629,8 @@ func GetCurrChat() (Chat, error) {
 
 func SetMessageHandler(h MsgHandler) {
 	msgHandler = h
+}
+
+func SetChatHeaderHandler(h ChatHeaderHandler) {
+	chatHeaderHandler = h
 }
