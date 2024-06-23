@@ -48,12 +48,26 @@ type chatMember struct {
 	Activity    time.Time `json:"Activity"`
 }
 
-type Chat struct {
+type ChatInfoJson struct {
 	Url        *url.URL     `json:"url"`
 	Name       string       `json:"name"`
 	MembersNum int          `json:"membersNum"`
 	Members    []chatMember `json:"members"`
-	MsgNum     int          `json:"msgNum"`
+}
+
+type Chat struct {
+	Url        *url.URL
+	Name       string
+	MembersNum int
+	Members    []chatMember
+	MsgNum     int
+}
+
+func toChat(i ChatInfoJson) Chat {
+	return Chat{Url: i.Url,
+		Name:       i.Name,
+		MembersNum: i.MembersNum,
+		Members:    i.Members}
 }
 
 var Chats []Chat
@@ -125,41 +139,41 @@ func addMeToMembers(members []chatMember) ([]chatMember, error) {
 
 const infoFileName string = "info.json"
 
-func collectChatInfo(chatPath string) (Chat, error) {
+func collectChatInfo(chatPath string) (ChatInfoJson, error) {
 	jsonFile, err := os.Open(filepath.Join(chatPath, infoFileName))
 	if err != nil {
 		appConfig.LogErr(err, "%s", infoFileName)
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 	defer jsonFile.Close()
 
 	byteValue, err := io.ReadAll(jsonFile)
 	if err != nil {
 		appConfig.LogErr(err, "reading %s", infoFileName)
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 
-	var chat Chat
+	var info ChatInfoJson
 
-	err = json.Unmarshal(byteValue, &chat)
+	err = json.Unmarshal(byteValue, &info)
 	if err != nil {
 		appConfig.LogErr(err, "unmarshalling %s", infoFileName)
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 
-	inMembers, err := foundMeInMembers(chat.Members)
+	inMembers, err := foundMeInMembers(info.Members)
 	if err != nil {
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 
 	if !inMembers {
-		chat.Members, err = addMeToMembers(chat.Members)
+		info.Members, err = addMeToMembers(info.Members)
 		if err != nil {
-			return Chat{}, err
+			return ChatInfoJson{}, err
 		}
 	}
 
-	return chat, nil
+	return info, nil
 }
 
 func commit(r *git.Repository, fileName string, msg string) error {
@@ -212,12 +226,12 @@ func push(r *git.Repository, opt *git.PushOptions) error {
 	return nil
 }
 
-func createChatInfo(chatUrl string, chatPath string) (Chat, error) {
+func createChatInfo(chatUrl string, chatPath string) (ChatInfoJson, error) {
 	path := filepath.Join(chatPath, infoFileName)
 	f, err := os.Create(path)
 	if err != nil {
 		appConfig.LogErr(err, "creating %s", infoFileName)
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 
 	defer f.Close()
@@ -225,56 +239,56 @@ func createChatInfo(chatUrl string, chatPath string) (Chat, error) {
 	u, err := url.Parse(chatUrl)
 	if err != nil {
 		appConfig.LogErr(err, "parsing URL: %s to string", chatUrl)
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 
 	var membersArr []chatMember
 	membersArr, err = addMeToMembers(membersArr)
 	if err != nil {
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 
 	chatName, err := getChatName(chatUrl)
 	if err != nil {
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 
-	chat := Chat{
+	info := ChatInfoJson{
 		Url:        u,
 		Name:       chatName,
 		MembersNum: len(membersArr),
 		Members:    membersArr,
-		MsgNum:     0,
-	}
-	chatJsonByte, err := json.Marshal(chat)
-	if err != nil {
-		appConfig.LogErr(err, "marshalling chat")
-		return Chat{}, err
 	}
 
-	_, err = f.Write(chatJsonByte)
+	chatInfoJsonByte, err := json.Marshal(info)
+	if err != nil {
+		appConfig.LogErr(err, "marshalling chat")
+		return ChatInfoJson{}, err
+	}
+
+	_, err = f.Write(chatInfoJsonByte)
 	if err != nil {
 		appConfig.LogErr(err, "writing chat JSON to %s", infoFileName)
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 
 	repo, err := git.PlainOpen(chatPath)
 	if err != nil {
 		appConfig.LogErr(err, "openning repo %s", chatPath)
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 
 	err = commit(repo, infoFileName, "Create info.json")
 	if err != nil {
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 
 	err = push(repo, &git.PushOptions{})
 	if err != nil {
-		return Chat{}, err
+		return ChatInfoJson{}, err
 	}
 
-	return chat, nil
+	return info, nil
 }
 
 func getLastMsg(r *git.Repository) (Message, error) {
@@ -319,10 +333,10 @@ func getChatPath(chatUrl string) (string, error) {
 	return chatDir + chatName, nil
 }
 
-func UpdateChatInfo(chat Chat) error {
-	chatJson, _ := json.Marshal(chat)
+func UpdateChatInfo(info ChatInfoJson) error {
+	chatInfoJson, _ := json.Marshal(info)
 
-	chatPath, err := getChatPath(chat.Url.Path)
+	chatPath, err := getChatPath(info.Url.Path)
 	if err != nil {
 		return err
 	}
@@ -340,7 +354,7 @@ func UpdateChatInfo(chat Chat) error {
 	}
 	defer f.Close()
 
-	_, err = f.Write(chatJson)
+	_, err = f.Write(chatInfoJson)
 	if err != nil {
 		appConfig.LogErr(err, "writing to %s", infoFilePath)
 		return err
@@ -409,7 +423,7 @@ func CollectChats() ([]Chat, []Message, error) {
 	for _, f := range files {
 		chatPath := chatDir + f.Name()
 		if f.IsDir() && isGitDir(chatPath) {
-			chat, err := collectChatInfo(chatPath)
+			info, err := collectChatInfo(chatPath)
 			if err != nil {
 				var e *os.PathError
 				switch {
@@ -433,6 +447,7 @@ func CollectChats() ([]Chat, []Message, error) {
 				return nil, nil, err
 			}
 
+			chat := toChat(info)
 			chat.MsgNum = msgNum
 			Chats = append(Chats, chat)
 
@@ -464,12 +479,12 @@ func AddChat(chatUrl string) (Chat, Message, error) {
 
 	appConfig.LogDebug("Clon repo %s", chatPath)
 
-	chat, err := collectChatInfo(chatPath)
+	info, err := collectChatInfo(chatPath)
 	if err != nil {
 		var e *os.PathError
 		switch {
 		case errors.As(err, &e):
-			chat, err = createChatInfo(chatUrl, chatPath)
+			info, err = createChatInfo(chatUrl, chatPath)
 			if err != nil {
 				return Chat{}, Message{}, err
 			}
@@ -486,6 +501,7 @@ func AddChat(chatUrl string) (Chat, Message, error) {
 		return Chat{}, Message{}, err
 	}
 
+	chat := toChat(info)
 	chat.MsgNum = msgNum
 	Chats = append(Chats, chat)
 
