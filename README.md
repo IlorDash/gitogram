@@ -27,10 +27,10 @@ Run Docker:
 
 ```shell
 docker run \
---name=my-go-git-server \
+--name=gitogram-server \
 --publish 8022:22 \
 --publish 3000:3000 \
--v /var/gogs:/data gogs/gogs
+-v `pwd`/gogs-data/:/data gogs/gogs
 ```
 
   * *name* - Docker container name.
