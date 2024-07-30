@@ -82,6 +82,8 @@ docker run \
 	```
 	Press green **Add Key** button.
 
+	> **Your .ssh/known_hosts should be placed at $HOME**
+
 ## To build:
 ```
 $ make run

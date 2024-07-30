@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,9 +14,13 @@ import (
 	"time"
 
 	"github.com/IlorDash/gitogram/internal/appConfig"
+
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
+
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 type Message struct {
@@ -461,6 +466,58 @@ func CollectChats() ([]Chat, []Message, error) {
 	return Chats, lastMsgArr, nil
 }
 
+func hostKeyCallback(hostname string, remote net.Addr, key ssh.PublicKey) error {
+	newLine := knownhosts.Line([]string{knownhosts.HashHostname(knownhosts.Normalize(hostname))}, key)
+
+	f, err := os.OpenFile(filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		appConfig.LogErr(err, "failed open knownhosts")
+		return err
+	}
+
+	defer f.Close()
+
+	_, err = f.WriteString(newLine + "\n")
+	if err != nil {
+		f.Close()
+		appConfig.LogErr(err, "failed to write new host %s", newLine)
+		return err
+	}
+
+	return nil
+}
+
+func AddHost(chatUrl string) error {
+	u, err := url.Parse(chatUrl)
+	if err != nil {
+		appConfig.LogErr(err, "parsing URL: %s to string", chatUrl)
+		return err
+	}
+
+	sshConfig := &ssh.ClientConfig{
+		HostKeyCallback: hostKeyCallback,
+	}
+
+	// Call ssh.Dial() to trigger hostKeyCallback and add host to knownhosts
+	client, _ := ssh.Dial("tcp", u.Host, sshConfig)
+	client.Close()
+
+	return nil
+}
+
+func unwrapKeyError(err error) (*knownhosts.KeyError, bool) {
+	for {
+		if unwrapper, ok := err.(interface{ Unwrap() error }); ok {
+			err = unwrapper.Unwrap()
+		} else {
+			break
+		}
+	}
+
+	keyErr, ok := err.(*knownhosts.KeyError)
+	return keyErr, ok
+}
+
 func AddChat(chatUrl string) (Chat, Message, error) {
 	chatPath, err := getChatPath(chatUrl)
 	if err != nil {
@@ -473,8 +530,13 @@ func AddChat(chatUrl string) (Chat, Message, error) {
 	})
 
 	if err != nil {
-		appConfig.LogErr(err, "clonning %s", chatUrl)
-		return Chat{}, Message{}, err
+		if keyErr, ok := unwrapKeyError(err); ok && len(keyErr.Want) == 0 {
+			appConfig.LogErr(err, "SSH handshake failed: knownhosts: key is unknown %s", chatUrl)
+			return Chat{}, Message{}, errors.New("knownhosts")
+		} else {
+			appConfig.LogErr(err, "clonning %s", chatUrl)
+			return Chat{}, Message{}, err
+		}
 	}
 
 	appConfig.LogDebug("Clon repo %s", chatPath)
