@@ -226,6 +226,8 @@ func collectChatInfo(chatPath string) (ChatInfoJson, error) {
 		if err != nil {
 			return ChatInfoJson{}, err
 		}
+		info.MembersNum = len(info.Members)
+		updateChatInfo(info)
 	}
 
 	return info, nil
@@ -296,7 +298,7 @@ func createChatInfo(chatUrl string, chatPath string) (ChatInfoJson, error) {
 	return info, nil
 }
 
-func UpdateChatInfo(info ChatInfoJson) error {
+func updateChatInfo(info ChatInfoJson) error {
 	chatInfoJson, _ := json.Marshal(info)
 
 	chatPath, err := getChatPath(info.Url.Path)
