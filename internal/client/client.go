@@ -499,8 +499,7 @@ func AddHost(chatUrl string) error {
 	}
 
 	// Call ssh.Dial() to trigger hostKeyCallback and add host to knownhosts
-	client, _ := ssh.Dial("tcp", u.Host, sshConfig)
-	client.Close()
+	_, _ = ssh.Dial("tcp", u.Host, sshConfig)
 
 	return nil
 }
