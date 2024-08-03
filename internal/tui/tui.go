@@ -181,7 +181,7 @@ func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
 
 	chatList := tview.NewList()
 	chatList.SetBorder(true).SetTitle("Chats")
-	chatList.AddItem("New chat +", "", 0, addChat(s, p))
+	chatList.AddItem("New chat +", "", 0, addChatModal(s, p))
 
 	for i := 0; i < len(chats) && i < len(lastMsgs); i++ {
 		index := i
@@ -299,7 +299,7 @@ func createModalForm(form tview.Primitive, height int, width int) tview.Primitiv
 	return modal
 }
 
-func addChat(s *appScreen, p *tview.Pages) func() {
+func addChatModal(s *appScreen, p *tview.Pages) func() {
 	return func() {
 		var chatUrl string
 		getChatForm := tview.NewForm()
