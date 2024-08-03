@@ -299,6 +299,48 @@ func createModalForm(form tview.Primitive, height int, width int) tview.Primitiv
 	return modal
 }
 
+func closeModalForm(p *tview.Pages) {
+	p.SwitchToPage("main")
+	p.RemovePage("modal")
+}
+
+func addHostModal(s *appScreen, p *tview.Pages, chatUrl string) {
+	host, err := client.GetHost(chatUrl)
+	if err != nil {
+		return
+	}
+
+	addHostForm := tview.NewForm()
+	addHostForm.AddTextView("",
+		fmt.Sprintf("The authenticity of host %s can't be established.\n", host)+
+			"Are you sure you want to continue connecting?",
+		0, 0, false, false)
+	addHostForm.AddButton("Yes", func() {
+		go func() {
+			err := client.AddHost(chatUrl)
+			if err != nil {
+				return
+			}
+			chat, lastMsg, err := client.AddChat(chatUrl)
+			if err != nil {
+				return
+			}
+			s.app.QueueUpdateDraw(func() {
+				addNewChatToList(s, s.main.chatList, chat, lastMsg)
+			})
+			closeModalForm(p)
+		}()
+	})
+	addHostForm.AddButton("No", func() {
+		closeModalForm(p)
+	})
+
+	addHostForm.SetButtonsAlign(tview.AlignCenter)
+	addHostForm.SetBorder(true).SetTitle("Add Host")
+	modal := createModalForm(addHostForm, 12, 70)
+	p.AddPage("modal", modal, true, true)
+}
+
 func addChatModal(s *appScreen, p *tview.Pages) func() {
 	return func() {
 		var chatUrl string
@@ -308,8 +350,13 @@ func addChatModal(s *appScreen, p *tview.Pages) func() {
 		})
 		getChatForm.AddButton("Add", func() {
 			go func() {
+				khErr := errors.New("knownhosts")
 				chat, lastMsg, err := client.AddChat(chatUrl)
 				if err != nil {
+					if err.Error() == khErr.Error() {
+						closeModalForm(p)
+						addHostModal(s, p, chatUrl)
+					}
 					return
 				}
 				s.app.QueueUpdateDraw(func() {
@@ -319,8 +366,7 @@ func addChatModal(s *appScreen, p *tview.Pages) func() {
 		})
 
 		getChatForm.AddButton("Quit", func() {
-			p.SwitchToPage("main")
-			p.RemovePage("modal")
+			closeModalForm(p)
 		})
 		getChatForm.SetButtonsAlign(tview.AlignCenter)
 		getChatForm.SetBorder(true).SetTitle("Add Chat")
