@@ -487,10 +487,18 @@ func hostKeyCallback(hostname string, remote net.Addr, key ssh.PublicKey) error 
 	return nil
 }
 
-func AddHost(chatUrl string) error {
+func GetHost(chatUrl string) (string, error) {
 	u, err := url.Parse(chatUrl)
 	if err != nil {
 		appConfig.LogErr(err, "parsing URL: %s to string", chatUrl)
+		return "", err
+	}
+	return u.Host, nil
+}
+
+func AddHost(chatUrl string) error {
+	host, err := GetHost(chatUrl)
+	if err != nil {
 		return err
 	}
 
@@ -499,7 +507,7 @@ func AddHost(chatUrl string) error {
 	}
 
 	// Call ssh.Dial() to trigger hostKeyCallback and add host to knownhosts
-	_, _ = ssh.Dial("tcp", u.Host, sshConfig)
+	_, _ = ssh.Dial("tcp", host, sshConfig)
 
 	return nil
 }
