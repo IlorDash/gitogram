@@ -282,11 +282,10 @@ func createMain(s *appScreen, p *tview.Pages) (*mainLayout, error) {
 }
 
 type appScreen struct {
-	app       *tview.Application
-	main      *mainLayout
-	log       *logLayout
-	showModal bool
-	currPage  string
+	app      *tview.Application
+	main     *mainLayout
+	log      *logLayout
+	currPage string
 }
 
 func createModalForm(form tview.Primitive, height int, width int) tview.Primitive {
@@ -320,14 +319,12 @@ func addChat(s *appScreen, p *tview.Pages) func() {
 		})
 
 		getChatForm.AddButton("Quit", func() {
-			s.showModal = false
 			p.SwitchToPage("main")
 			p.RemovePage("modal")
 		})
 		getChatForm.SetButtonsAlign(tview.AlignCenter)
 		getChatForm.SetBorder(true).SetTitle("Add Chat")
 		modal := createModalForm(getChatForm, 7, 70)
-		s.showModal = true
 		p.AddPage("modal", modal, true, true)
 	}
 }
@@ -437,9 +434,10 @@ func initCommands(s *appScreen, p *tview.Pages) {
 	keyCmds[tcell.KeyTab] = cmd{name: "", f: switchPanel(s)}
 }
 
-func setKeyboardHandler(s *appScreen) {
+func setKeyboardHandler(s *appScreen, p *tview.Pages) {
 	s.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if s.showModal {
+		frontPage, _ := p.GetFrontPage()
+		if frontPage == "modal" {
 			return event
 		}
 
@@ -472,7 +470,7 @@ func createCommands(s *appScreen, p *tview.Pages) *tview.Flex {
 	}
 	cmdContainer.SetDirection(tview.FlexColumn).SetBorder(true)
 
-	setKeyboardHandler(s)
+	setKeyboardHandler(s, p)
 
 	return cmdContainer
 }
@@ -561,7 +559,6 @@ func createApp() (*tview.Application, error) {
 	pages := tview.NewPages()
 
 	var err error
-	screen.showModal = false
 	screen.main, err = createMain(screen, pages)
 	if err != nil {
 		return nil, err
