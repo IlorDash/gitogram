@@ -142,45 +142,6 @@ func addMeToMembers(members []chatMember) ([]chatMember, error) {
 	return members, nil
 }
 
-const infoFileName string = "info.json"
-
-func collectChatInfo(chatPath string) (ChatInfoJson, error) {
-	jsonFile, err := os.Open(filepath.Join(chatPath, infoFileName))
-	if err != nil {
-		appConfig.LogErr(err, "%s", infoFileName)
-		return ChatInfoJson{}, err
-	}
-	defer jsonFile.Close()
-
-	byteValue, err := io.ReadAll(jsonFile)
-	if err != nil {
-		appConfig.LogErr(err, "reading %s", infoFileName)
-		return ChatInfoJson{}, err
-	}
-
-	var info ChatInfoJson
-
-	err = json.Unmarshal(byteValue, &info)
-	if err != nil {
-		appConfig.LogErr(err, "unmarshalling %s", infoFileName)
-		return ChatInfoJson{}, err
-	}
-
-	inMembers, err := foundMeInMembers(info.Members)
-	if err != nil {
-		return ChatInfoJson{}, err
-	}
-
-	if !inMembers {
-		info.Members, err = addMeToMembers(info.Members)
-		if err != nil {
-			return ChatInfoJson{}, err
-		}
-	}
-
-	return info, nil
-}
-
 func commit(r *git.Repository, fileName string, msg string) error {
 	w, err := r.Worktree()
 	if err != nil {
@@ -229,6 +190,45 @@ func push(r *git.Repository, opt *git.PushOptions) error {
 		return err
 	}
 	return nil
+}
+
+const infoFileName string = "info.json"
+
+func collectChatInfo(chatPath string) (ChatInfoJson, error) {
+	jsonFile, err := os.Open(filepath.Join(chatPath, infoFileName))
+	if err != nil {
+		appConfig.LogErr(err, "%s", infoFileName)
+		return ChatInfoJson{}, err
+	}
+	defer jsonFile.Close()
+
+	byteValue, err := io.ReadAll(jsonFile)
+	if err != nil {
+		appConfig.LogErr(err, "reading %s", infoFileName)
+		return ChatInfoJson{}, err
+	}
+
+	var info ChatInfoJson
+
+	err = json.Unmarshal(byteValue, &info)
+	if err != nil {
+		appConfig.LogErr(err, "unmarshalling %s", infoFileName)
+		return ChatInfoJson{}, err
+	}
+
+	inMembers, err := foundMeInMembers(info.Members)
+	if err != nil {
+		return ChatInfoJson{}, err
+	}
+
+	if !inMembers {
+		info.Members, err = addMeToMembers(info.Members)
+		if err != nil {
+			return ChatInfoJson{}, err
+		}
+	}
+
+	return info, nil
 }
 
 func createChatInfo(chatUrl string, chatPath string) (ChatInfoJson, error) {
@@ -296,48 +296,6 @@ func createChatInfo(chatUrl string, chatPath string) (ChatInfoJson, error) {
 	return info, nil
 }
 
-func getLastMsg(r *git.Repository) (Message, error) {
-	ref, err := r.Head()
-	if err != nil {
-		appConfig.LogErr(err, "retrieving HEAD")
-		return Message{}, err
-	}
-
-	commit, err := r.CommitObject(ref.Hash())
-	if err != nil {
-		appConfig.LogErr(err, "retrieving commit")
-		return Message{}, err
-	}
-
-	return Message{
-		Text:   commit.Message,
-		Author: commit.Author.Name,
-		Time:   commit.Author.When,
-	}, nil
-}
-
-func getChatName(chatUrl string) (string, error) {
-	re := regexp.MustCompile(`\/([a-zA-Z0-9-]+)\.git`)
-	match := re.FindStringSubmatch(chatUrl)
-	if len(match) == 0 {
-		err := errors.New("no match chat name")
-		appConfig.LogErr(err, "wrong chat URL %s", chatUrl)
-		return "", err
-	}
-	return match[1], nil
-}
-
-const chatDir string = "chats/"
-
-func getChatPath(chatUrl string) (string, error) {
-	chatName, err := getChatName(chatUrl)
-	if err != nil {
-		return "", err
-	}
-
-	return chatDir + chatName, nil
-}
-
 func UpdateChatInfo(info ChatInfoJson) error {
 	chatInfoJson, _ := json.Marshal(info)
 
@@ -382,6 +340,48 @@ func UpdateChatInfo(info ChatInfoJson) error {
 	}
 
 	return nil
+}
+
+func getLastMsg(r *git.Repository) (Message, error) {
+	ref, err := r.Head()
+	if err != nil {
+		appConfig.LogErr(err, "retrieving HEAD")
+		return Message{}, err
+	}
+
+	commit, err := r.CommitObject(ref.Hash())
+	if err != nil {
+		appConfig.LogErr(err, "retrieving commit")
+		return Message{}, err
+	}
+
+	return Message{
+		Text:   commit.Message,
+		Author: commit.Author.Name,
+		Time:   commit.Author.When,
+	}, nil
+}
+
+func getChatName(chatUrl string) (string, error) {
+	re := regexp.MustCompile(`\/([a-zA-Z0-9-]+)\.git`)
+	match := re.FindStringSubmatch(chatUrl)
+	if len(match) == 0 {
+		err := errors.New("no match chat name")
+		appConfig.LogErr(err, "wrong chat URL %s", chatUrl)
+		return "", err
+	}
+	return match[1], nil
+}
+
+const chatDir string = "chats/"
+
+func getChatPath(chatUrl string) (string, error) {
+	chatName, err := getChatName(chatUrl)
+	if err != nil {
+		return "", err
+	}
+
+	return chatDir + chatName, nil
 }
 
 func isGitDir(dir string) bool {
