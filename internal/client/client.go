@@ -41,12 +41,6 @@ type ChatHeader struct {
 	MsgNum     int
 }
 
-type ChatHeaderHandler interface {
-	Update(c ChatHeader)
-}
-
-var chatHeaderHandler ChatHeaderHandler
-
 type chatMember struct {
 	Username    string    `json:"Username"`
 	VisibleName string    `json:"VisibleName"`
@@ -622,92 +616,88 @@ func printMsgs(r *git.Repository) error {
 	return nil
 }
 
-func SelectChat(chat Chat) error {
+func SelectChat(chat Chat) (ChatHeader, error) {
 	if c, err := findChatInList(chat); err == nil {
 		currChat = c
 
 		chatPath, err := getChatPath(currChat.Url.Path)
 		if err != nil {
-			return err
+			return ChatHeader{}, err
 		}
 
 		repo, err := git.PlainOpen(chatPath)
 		if err != nil {
 			appConfig.LogErr(err, "openning repo %s", chatPath)
-			return err
+			return ChatHeader{}, err
 		}
 
 		msgNum, err := pullMsgs(repo)
 		if err != nil {
-			return err
+			return ChatHeader{}, err
 		}
 
 		currChat.MsgNum = msgNum
 
-		chatHeaderHandler.Update(ChatHeader{
+		err = printMsgs(repo)
+		if err != nil {
+			return ChatHeader{}, err
+		}
+
+		return ChatHeader{
 			Name:       currChat.Name,
 			MembersNum: currChat.MembersNum,
 			MsgNum:     currChat.MsgNum,
-		})
-
-		err = printMsgs(repo)
-		if err != nil {
-			return err
-		}
-
-		return nil
+		}, nil
 	}
-	return fmt.Errorf("chat %s not found", chat.Name)
+	return ChatHeader{}, fmt.Errorf("chat %s not found", chat.Name)
 }
 
-func SendMsg(text string) (Message, error) {
+func SendMsg(text string) (ChatHeader, Message, error) {
 	if currChat.Url == nil {
-		return Message{}, errors.New("missing url")
+		return ChatHeader{}, Message{}, errors.New("missing url")
 	}
 
 	chatPath, err := getChatPath(currChat.Url.Path)
 	if err != nil {
-		return Message{}, err
+		return ChatHeader{}, Message{}, err
 	}
 
 	repo, err := git.PlainOpen(chatPath)
 	if err != nil {
 		appConfig.LogErr(err, "openning repo %s", chatPath)
-		return Message{}, err
+		return ChatHeader{}, Message{}, err
 	}
 
 	msgNum, err := pullMsgs(repo)
 	if err != nil {
-		return Message{}, err
+		return ChatHeader{}, Message{}, err
 	}
 
 	currChat.MsgNum = msgNum
 
 	err = commit(repo, "", text)
 	if err != nil {
-		return Message{}, err
+		return ChatHeader{}, Message{}, err
 	}
 
 	err = push(repo, &git.PushOptions{})
 	if err != nil {
-		return Message{}, err
+		return ChatHeader{}, Message{}, err
 	}
 	appConfig.LogDebug("Send msg %s to %s", text, currChat.Name)
 
 	currChat.MsgNum += 1
 
-	chatHeaderHandler.Update(ChatHeader{Name: currChat.Name,
-		MembersNum: currChat.MembersNum,
-		MsgNum:     currChat.MsgNum})
-
 	m, err := getLastMsg(repo)
 	if err != nil {
-		return Message{}, err
+		return ChatHeader{}, Message{}, err
 	}
 
 	msgHandler.Print(m)
 
-	return m, nil
+	return ChatHeader{Name: currChat.Name,
+		MembersNum: currChat.MembersNum,
+		MsgNum:     currChat.MsgNum}, m, nil
 }
 
 func GetCurrChat() (Chat, error) {
@@ -716,8 +706,4 @@ func GetCurrChat() (Chat, error) {
 
 func SetMessageHandler(h MsgHandler) {
 	msgHandler = h
-}
-
-func SetChatHeaderHandler(h ChatHeaderHandler) {
-	chatHeaderHandler = h
 }

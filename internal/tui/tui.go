@@ -92,6 +92,14 @@ func (s *appScreen) membersNum(num int) {
 	})
 }
 
+func updateChatHeader(s *appScreen, c client.ChatHeader) {
+	go func() {
+		s.chatName(c.Name)
+		s.membersNum(c.MembersNum)
+		s.msgNum(c.MsgNum)
+	}()
+}
+
 func createChatLayout(s *appScreen) *chatLayout {
 	c := &chatLayout{}
 	c.panel = tview.NewFlex().SetDirection(tview.FlexRow)
@@ -114,7 +122,7 @@ func createChatLayout(s *appScreen) *chatLayout {
 			msg = newMsg
 		}).
 		SetDoneFunc(func(key tcell.Key) {
-			msgInfo, err := client.SendMsg(msg)
+			h, msgInfo, err := client.SendMsg(msg)
 			if err != nil {
 				appConfig.LogErr(err, "failed to send msg")
 				return
@@ -124,6 +132,7 @@ func createChatLayout(s *appScreen) *chatLayout {
 				appConfig.LogErr(err, "failed get current Chat")
 				return
 			}
+			updateChatHeader(s, h)
 			updCurrChatInList(s, chat, msgInfo)
 		})
 
@@ -153,7 +162,11 @@ func chatListRelativeTime(t time.Time) string {
 
 func handleChatSelected(s *appScreen, c client.Chat) {
 	log.Printf("Selected %s chat\n", c.Name)
-	client.SelectChat(c)
+	h, err := client.SelectChat(c)
+	if err != nil {
+		return
+	}
+	updateChatHeader(s, h)
 	s.main.selectChatIndex = s.main.chatList.GetCurrentItem()
 }
 
@@ -577,16 +590,6 @@ func (h tuiMessageHandler) Print(m client.Message) {
 	h.s.main.chat.dialogue.ScrollToEnd()
 }
 
-type tuiChatHeaderHandler struct{ s *appScreen }
-
-func (h tuiChatHeaderHandler) Update(c client.ChatHeader) {
-	go func() {
-		h.s.chatName(c.Name)
-		h.s.membersNum(c.MembersNum)
-		h.s.msgNum(c.MsgNum)
-	}()
-}
-
 func setOutputs(s *appScreen) {
 	dialogue = log.New(s.main.chat.dialogue, "", 0)
 	log.SetFlags(log.LstdFlags)
@@ -596,7 +599,6 @@ func setOutputs(s *appScreen) {
 	}
 
 	client.SetMessageHandler(tuiMessageHandler{s: s})
-	client.SetChatHeaderHandler(tuiChatHeaderHandler{s: s})
 }
 
 func createApp() (*tview.Application, error) {
