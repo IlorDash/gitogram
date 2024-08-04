@@ -308,7 +308,7 @@ func updateChatInfo(info ChatInfoJson) error {
 
 	infoFilePath := filepath.Join(chatPath, infoFileName)
 
-	f, err := os.OpenFile(infoFilePath, os.O_APPEND|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(infoFilePath, os.O_WRONLY, 0644)
 	if err != nil {
 		if os.IsNotExist(err) {
 			appConfig.LogErr(err, "%s does not exist", infoFilePath)
