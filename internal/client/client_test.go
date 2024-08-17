@@ -46,6 +46,8 @@ func teardownTest(t *testing.T) {
 }
 
 func TestAddChat(t *testing.T) {
+	defer teardownTest(t)
+
 	tests := []struct {
 		envName        string
 		giveUrl        string
@@ -105,8 +107,6 @@ func TestAddChat(t *testing.T) {
 			tests[i].giveUrl = urlMap[t.envName]
 		}
 	}
-
-	defer teardownTest(t)
 
 	for _, tt := range tests {
 		t.Run(tt.giveUrl, func(t *testing.T) {
