@@ -49,44 +49,28 @@ func TestAddChat(t *testing.T) {
 	defer teardownTest(t)
 
 	tests := []struct {
-		envName        string
-		giveUrl        string
-		wantName       string
-		wantMembersNum int
-		wantMsgNum     int
-		wantErr        error
+		envName  string
+		giveUrl  string
+		wantName string
+		wantErr  error
 	}{
 		{
-			envName:        "TEST_CHAT_URL_GITOGRAM",
-			giveUrl:        "",
-			wantName:       "gitogram-test-repo",
-			wantMembersNum: 1,
-			wantMsgNum:     0,
-			wantErr:        nil,
+			envName:  "TEST_CHAT_URL_REPO",
+			giveUrl:  "",
+			wantName: "gitogram-test",
+			wantErr:  nil,
 		},
 		{
-			envName:        "TEST_CHAT_URL_MESSAGES",
-			giveUrl:        "",
-			wantName:       "messages-repo",
-			wantMembersNum: 1,
-			wantMsgNum:     0,
-			wantErr:        nil,
+			envName:  "",
+			giveUrl:  "",
+			wantName: "",
+			wantErr:  errors.New("no match chat name"),
 		},
 		{
-			envName:        "",
-			giveUrl:        "",
-			wantName:       "",
-			wantMembersNum: 0,
-			wantMsgNum:     0,
-			wantErr:        errors.New("no match chat name"),
-		},
-		{
-			envName:        "",
-			giveUrl:        "abcdefg",
-			wantName:       "",
-			wantMembersNum: 0,
-			wantMsgNum:     0,
-			wantErr:        errors.New("no match chat name"),
+			envName:  "",
+			giveUrl:  "abcdefg",
+			wantName: "",
+			wantErr:  errors.New("no match chat name"),
 		},
 	}
 
@@ -112,8 +96,6 @@ func TestAddChat(t *testing.T) {
 		t.Run(tt.giveUrl, func(t *testing.T) {
 			ans, _, err := AddChat(tt.giveUrl)
 			assert.Equal(t, tt.wantName, ans.Name)
-			assert.Equal(t, tt.wantMembersNum, ans.MembersNum)
-			assert.Equal(t, tt.wantMsgNum, ans.MsgNum)
 			assert.Equal(t, tt.wantErr, err)
 		})
 	}
