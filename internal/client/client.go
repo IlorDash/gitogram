@@ -17,7 +17,9 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -521,21 +523,65 @@ func unwrapKeyError(err error) (*knownhosts.KeyError, bool) {
 	return keyErr, ok
 }
 
+func addEmptyChat(chatUrl string) (*git.Repository, error) {
+	chatPath, err := getChatPath(chatUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	repo, err := git.PlainInit(chatPath, false)
+	if err != nil {
+		appConfig.LogErr(err, "failed to initialize at: %s", chatPath)
+		return nil, err
+	}
+
+	_, err = repo.CreateRemote(&config.RemoteConfig{
+		Name: git.DefaultRemoteName,
+		URLs: []string{chatUrl},
+	})
+	if err != nil {
+		appConfig.LogErr(err, "failed to create remote in repo at: %s", chatPath)
+		return nil, err
+	}
+
+	branch := "master"
+
+	if err = repo.CreateBranch(&config.Branch{Name: branch, Remote: git.DefaultRemoteName, Merge: plumbing.Master}); err != nil {
+		appConfig.LogErr(err, "failed to create branch %s", branch)
+		return nil, err
+	}
+
+	return repo, nil
+}
+
 func AddChat(chatUrl string) (Chat, Message, error) {
 	chatPath, err := getChatPath(chatUrl)
 	if err != nil {
 		return Chat{}, Message{}, err
 	}
 
-	repo, err := git.PlainClone(chatPath, false, &git.CloneOptions{
+	var repo *git.Repository
+
+	repo, err = git.PlainClone(chatPath, false, &git.CloneOptions{
 		URL:               chatUrl,
 		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
 	})
 
 	if err != nil {
-		if keyErr, ok := unwrapKeyError(err); ok && len(keyErr.Want) == 0 {
-			appConfig.LogErr(err, "SSH handshake failed: knownhosts: key is unknown %s", chatUrl)
-			return Chat{}, Message{}, errors.New("knownhosts")
+		if errors.Unwrap(err) != nil {
+			if keyErr, ok := unwrapKeyError(err); ok && len(keyErr.Want) == 0 {
+				appConfig.LogErr(err, "SSH handshake failed: knownhosts: key is unknown %s", chatUrl)
+				return Chat{}, Message{}, errors.New("knownhosts")
+			} else {
+				appConfig.LogErr(err, "clonning %s get wrapped error", chatUrl)
+				return Chat{}, Message{}, err
+			}
+		} else if err == transport.ErrEmptyRemoteRepository {
+			appConfig.LogDebug("repo %s is empty", chatUrl)
+			repo, err = addEmptyChat(chatUrl)
+			if err != nil {
+				return Chat{}, Message{}, err
+			}
 		} else {
 			appConfig.LogErr(err, "clonning %s", chatUrl)
 			return Chat{}, Message{}, err
