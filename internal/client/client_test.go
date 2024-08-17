@@ -42,7 +42,6 @@ func setupTest(t *testing.T, testEnv map[string]string) (map[string]string, erro
 }
 
 func teardownTest(t *testing.T) {
-	t.Log("Teardown for test")
 	os.RemoveAll(testDir)
 }
 
