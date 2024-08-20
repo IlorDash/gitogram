@@ -19,6 +19,10 @@ func setupTest(t *testing.T, testEnv map[string]string) (map[string]string, erro
 		return nil, errors.New("load .env file")
 	}
 
+	if _, err := os.Stat(testDir); err == nil {
+		os.RemoveAll(testDir)
+	}
+
 	if err := os.Mkdir(testDir, os.ModePerm); err != nil {
 		t.Fatalf("Error making dir %s %v", testDir, err)
 		return nil, errors.New("make test dir")
