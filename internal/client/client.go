@@ -246,9 +246,14 @@ func getChatName(chatUrl string) (string, error) {
 	return match[1], nil
 }
 
-func createChatInfo(chatUrl string, chatPath string) (ChatInfoJson, error) {
-	path := filepath.Join(chatPath, infoFileName)
-	f, err := os.Create(path)
+func createChatInfo(chatUrl string) (ChatInfoJson, error) {
+	chatPath, err := getChatPath(chatUrl)
+	if err != nil {
+		return ChatInfoJson{}, err
+	}
+
+	chatInfoPath := filepath.Join(chatPath, infoFileName)
+	f, err := os.Create(chatInfoPath)
 	if err != nil {
 		appConfig.LogErr(err, "creating %s", infoFileName)
 		return ChatInfoJson{}, err
@@ -586,7 +591,7 @@ func AddChat(chatUrl string) (Chat, Message, error) {
 		var e *os.PathError
 		switch {
 		case errors.As(err, &e):
-			info, err = createChatInfo(chatUrl, chatPath)
+			info, err = createChatInfo(chatUrl)
 			if err != nil {
 				appConfig.LogErr(err, "failed to create chat info")
 				return Chat{}, Message{}, err
