@@ -52,40 +52,43 @@ func teardownTest(t *testing.T) {
 func TestAddChat(t *testing.T) {
 	defer teardownTest(t)
 
-	tests := []struct {
+	subtests := []struct {
+		name     string
 		envName  string
 		giveUrl  string
 		wantName string
 		wantErr  error
 	}{
 		{
+			name:     "Test common chat",
 			envName:  "TEST_CHAT_URL_REPO",
 			giveUrl:  "",
 			wantName: "gitogram-test",
 			wantErr:  nil,
+		}, {
+			name:     "Test empty url",
+			envName:  "",
+			giveUrl:  "",
+			wantName: "",
+			wantErr:  ErrNoMatchChatName,
+		}, {
+			name:     "Test invalid url",
+			envName:  "",
+			giveUrl:  "abcdefg",
+			wantName: "",
+			wantErr:  ErrNoMatchChatName,
 		},
 		{
+			name:     "Test empty chat",
 			envName:  "TEST_CHAT_URL_EMPTY",
 			giveUrl:  "",
 			wantName: "",
 			wantErr:  errors.New("unknown error: Gogs: You do not have sufficient authorization for this action"),
 		},
-		{
-			envName:  "",
-			giveUrl:  "",
-			wantName: "",
-			wantErr:  errors.New("no match chat name"),
-		},
-		{
-			envName:  "",
-			giveUrl:  "abcdefg",
-			wantName: "",
-			wantErr:  errors.New("no match chat name"),
-		},
 	}
 
 	urlMap := make(map[string]string)
-	for _, item := range tests {
+	for _, item := range subtests {
 		if item.envName != "" {
 			urlMap[item.envName] = ""
 		}
@@ -96,14 +99,14 @@ func TestAddChat(t *testing.T) {
 		return
 	}
 
-	for i, t := range tests {
+	for i, t := range subtests {
 		if t.envName != "" {
-			tests[i].giveUrl = urlMap[t.envName]
+			subtests[i].giveUrl = urlMap[t.envName]
 		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.giveUrl, func(t *testing.T) {
+	for _, tt := range subtests {
+		t.Run(tt.name, func(t *testing.T) {
 			ans, _, err := AddChat(tt.giveUrl)
 			assert.Equal(t, tt.wantName, ans.Name)
 			assert.Equal(t, tt.wantErr, err)

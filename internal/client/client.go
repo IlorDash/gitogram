@@ -25,6 +25,12 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
+var (
+	ErrNoMatchChatName = errors.New("no match chat name")
+
+	ErrKnownhosts = errors.New("knownhosts")
+)
+
 type Message struct {
 	Text   string
 	Author string
@@ -229,6 +235,17 @@ func collectChatInfo(chatPath string) (ChatInfoJson, error) {
 	return info, nil
 }
 
+func getChatName(chatUrl string) (string, error) {
+	re := regexp.MustCompile(`\/([a-zA-Z0-9-]+)\.git`)
+	match := re.FindStringSubmatch(chatUrl)
+	if len(match) == 0 {
+		err := ErrNoMatchChatName
+		appConfig.LogErr(err, "wrong chat URL %s", chatUrl)
+		return "", err
+	}
+	return match[1], nil
+}
+
 func createChatInfo(chatUrl string, chatPath string) (ChatInfoJson, error) {
 	path := filepath.Join(chatPath, infoFileName)
 	f, err := os.Create(path)
@@ -283,11 +300,13 @@ func createChatInfo(chatUrl string, chatPath string) (ChatInfoJson, error) {
 
 	err = commit(repo, infoFileName, "Create info.json")
 	if err != nil {
+		appConfig.LogErr(err, "failed to commit chat info in: %s", chatName)
 		return ChatInfoJson{}, err
 	}
 
 	err = push(repo, &git.PushOptions{})
 	if err != nil {
+		appConfig.LogErr(err, "failed to push chat info in: %s", chatName)
 		return ChatInfoJson{}, err
 	}
 
@@ -360,17 +379,6 @@ func getLastMsg(r *git.Repository) (Message, error) {
 	}, nil
 }
 
-func getChatName(chatUrl string) (string, error) {
-	re := regexp.MustCompile(`\/([a-zA-Z0-9-]+)\.git`)
-	match := re.FindStringSubmatch(chatUrl)
-	if len(match) == 0 {
-		err := errors.New("no match chat name")
-		appConfig.LogErr(err, "wrong chat URL %s", chatUrl)
-		return "", err
-	}
-	return match[1], nil
-}
-
 const chatDir string = "chats/"
 
 func getChatPath(chatUrl string) (string, error) {
@@ -428,9 +436,9 @@ func CollectChats() ([]Chat, []Message, error) {
 		if f.IsDir() && isGitDir(chatPath) {
 			info, err := collectChatInfo(chatPath)
 			if err != nil {
-				var e *os.PathError
+				var pe *os.PathError
 				switch {
-				case errors.As(err, &e):
+				case errors.As(err, &pe):
 					appConfig.LogErr(err, "chat %s missing info.json", f.Name())
 					continue
 				default:
@@ -510,19 +518,6 @@ func AddHost(chatUrl string) error {
 	return nil
 }
 
-func unwrapKeyError(err error) (*knownhosts.KeyError, bool) {
-	for {
-		if unwrapper, ok := err.(interface{ Unwrap() error }); ok {
-			err = unwrapper.Unwrap()
-		} else {
-			break
-		}
-	}
-
-	keyErr, ok := err.(*knownhosts.KeyError)
-	return keyErr, ok
-}
-
 func addEmptyChat(chatUrl string) (*git.Repository, error) {
 	chatPath, err := getChatPath(chatUrl)
 	if err != nil {
@@ -567,28 +562,24 @@ func AddChat(chatUrl string) (Chat, Message, error) {
 		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
 	})
 
-	if err != nil {
-		if errors.Unwrap(err) != nil {
-			if keyErr, ok := unwrapKeyError(err); ok && len(keyErr.Want) == 0 {
-				appConfig.LogErr(err, "SSH handshake failed: knownhosts: key is unknown %s", chatUrl)
-				return Chat{}, Message{}, errors.New("knownhosts")
-			} else {
-				appConfig.LogErr(err, "clonning %s get wrapped error", chatUrl)
-				return Chat{}, Message{}, err
-			}
-		} else if err == transport.ErrEmptyRemoteRepository {
-			appConfig.LogDebug("repo %s is empty", chatUrl)
-			repo, err = addEmptyChat(chatUrl)
-			if err != nil {
-				return Chat{}, Message{}, err
-			}
-		} else {
-			appConfig.LogErr(err, "clonning %s", chatUrl)
+	var khErr *knownhosts.KeyError
+
+	switch {
+	case errors.As(err, &khErr):
+		appConfig.LogErr(err, "SSH handshake failed: knownhosts: key is unknown %s", chatUrl)
+		return Chat{}, Message{}, ErrKnownhosts
+	case errors.Is(err, transport.ErrEmptyRemoteRepository):
+		appConfig.LogDebug("repo %s is empty", chatUrl)
+		repo, err = addEmptyChat(chatUrl)
+		if err != nil {
 			return Chat{}, Message{}, err
 		}
+	case err != nil:
+		appConfig.LogErr(err, "failed to clone %s", chatUrl)
+		return Chat{}, Message{}, err
+	default:
+		appConfig.LogDebug("Clone repo %s", chatPath)
 	}
-
-	appConfig.LogDebug("Clon repo %s", chatPath)
 
 	info, err := collectChatInfo(chatPath)
 	if err != nil {
@@ -597,6 +588,7 @@ func AddChat(chatUrl string) (Chat, Message, error) {
 		case errors.As(err, &e):
 			info, err = createChatInfo(chatUrl, chatPath)
 			if err != nil {
+				appConfig.LogErr(err, "failed to create chat info")
 				return Chat{}, Message{}, err
 			}
 			appConfig.LogDebug("Create chat info file")

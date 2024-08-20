@@ -317,6 +317,21 @@ func closeModalForm(p *tview.Pages) {
 	p.RemovePage("modal")
 }
 
+func addInfoModal(p *tview.Pages, title string, info string) {
+	addInfoForm := tview.NewForm()
+	addInfoForm.AddTextView("",
+		info,
+		0, 0, false, false)
+	addInfoForm.AddButton("Close", func() {
+		closeModalForm(p)
+	})
+
+	addInfoForm.SetButtonsAlign(tview.AlignCenter)
+	addInfoForm.SetBorder(true).SetTitle(title)
+	modal := createModalForm(addInfoForm, 12, 70)
+	p.AddPage("modal", modal, true, true)
+}
+
 func addHostModal(s *appScreen, p *tview.Pages, chatUrl string) {
 	host, err := client.GetHost(chatUrl)
 	if err != nil {
@@ -335,9 +350,19 @@ func addHostModal(s *appScreen, p *tview.Pages, chatUrl string) {
 				return
 			}
 			chat, lastMsg, err := client.AddChat(chatUrl)
-			if err != nil {
+			switch {
+			case errors.Is(err, client.ErrKnownhosts):
+				closeModalForm(p)
+				addHostModal(s, p, chatUrl)
+			case err == nil:
+				// fallthrough ...
+			default:
+				closeModalForm(p)
+				addInfoModal(p, "Unexpected error during add chat",
+					"Encountered unexpected error during add chat. Please look into the logs.")
 				return
 			}
+
 			s.app.QueueUpdateDraw(func() {
 				addNewChatToList(s, s.main.chatList, chat, lastMsg)
 			})
@@ -363,15 +388,21 @@ func addChatModal(s *appScreen, p *tview.Pages) func() {
 		})
 		getChatForm.AddButton("Add", func() {
 			go func() {
-				khErr := errors.New("knownhosts")
 				chat, lastMsg, err := client.AddChat(chatUrl)
-				if err != nil {
-					if err.Error() == khErr.Error() {
-						closeModalForm(p)
-						addHostModal(s, p, chatUrl)
-					}
+
+				switch {
+				case errors.Is(err, client.ErrKnownhosts):
+					closeModalForm(p)
+					addHostModal(s, p, chatUrl)
+				case err == nil:
+					// fallthrough ...
+				default:
+					closeModalForm(p)
+					addInfoModal(p, "Unexpected error during add chat",
+						"Encountered unexpected error during add chat. Please look into the logs.")
 					return
 				}
+
 				s.app.QueueUpdateDraw(func() {
 					addNewChatToList(s, s.main.chatList, chat, lastMsg)
 				})
