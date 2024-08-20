@@ -621,13 +621,13 @@ func AddChat(chatUrl string) (Chat, Message, error) {
 	return chat, lastMsg, nil
 }
 
-func findChatInList(chat Chat) (*Chat, error) {
+func findChatInList(chat Chat) *Chat {
 	for _, c := range Chats {
 		if c.Name == chat.Name {
-			return &c, nil
+			return &c
 		}
 	}
-	return nil, fmt.Errorf("chat %s not found", chat.Name)
+	return nil
 }
 
 func printMsgs(r *git.Repository) error {
@@ -660,7 +660,7 @@ func printMsgs(r *git.Repository) error {
 }
 
 func SelectChat(chat Chat) (ChatHeader, error) {
-	if c, err := findChatInList(chat); err == nil {
+	if c := findChatInList(chat); c != nil {
 		currChat = c
 
 		chatPath, err := getChatPath(currChat.Url.Path)
