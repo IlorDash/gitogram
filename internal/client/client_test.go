@@ -83,7 +83,14 @@ func TestAddChat(t *testing.T) {
 			envName:  "TEST_CHAT_URL_EMPTY",
 			giveUrl:  "",
 			wantName: "",
-			wantErr:  errors.New("unknown error: Gogs: You do not have sufficient authorization for this action"),
+			wantErr:  ErrPushChatInfo,
+		},
+		{
+			name:     "Test already clonned chat",
+			envName:  "TEST_CHAT_URL_EMPTY",
+			giveUrl:  "",
+			wantName: "",
+			wantErr:  ErrPushChatInfo,
 		},
 	}
 

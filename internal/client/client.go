@@ -28,7 +28,13 @@ import (
 var (
 	ErrNoMatchChatName = errors.New("no match chat name")
 
-	ErrKnownhosts = errors.New("knownhosts")
+	ErrKnownhosts       = errors.New("knownhosts")
+	ErrChatAlreadyAdded = errors.New("chat already added")
+	ErrCreateChatInfo   = errors.New("failed to create chat info")
+
+	ErrCommitChatInfo  = errors.New("failed to commit chat info, remove file")
+	ErrPushChatInfo    = errors.New("failed to push chat info, reset commit")
+	ErrResetLastCommit = errors.New("failed to reset last commit, remove chat")
 )
 
 type Message struct {
@@ -246,6 +252,40 @@ func getChatName(chatUrl string) (string, error) {
 	return match[1], nil
 }
 
+func resetLastCommit(repo *git.Repository, chatName string) error {
+	w, err := repo.Worktree()
+	if err != nil {
+		appConfig.LogErr(err, "retrieving worktree")
+		return err
+	}
+
+	headRef, err := repo.Head()
+	if err != nil {
+		appConfig.LogErr(err, "failed to get HEAD in: %s", chatName)
+		return err
+	}
+
+	headCommit, err := repo.CommitObject(headRef.Hash())
+	if err != nil {
+		appConfig.LogErr(err, "failed to get HEAD commit in: %s", chatName)
+		return err
+	}
+
+	parentCommit, err := headCommit.Parent(0)
+	if err != nil {
+		appConfig.LogErr(err, "no parent commit found, this is likely the initial commit in: %s", chatName)
+		return err
+	}
+
+	err = w.Reset(&git.ResetOptions{Mode: git.HardReset, Commit: parentCommit.Hash})
+	if err != nil {
+		appConfig.LogErr(err, "failed to reset chat info in: %s", chatName)
+		return err
+	}
+
+	return nil
+}
+
 func createChatInfo(chatUrl string) (ChatInfoJson, error) {
 	chatPath, err := getChatPath(chatUrl)
 	if err != nil {
@@ -255,6 +295,7 @@ func createChatInfo(chatUrl string) (ChatInfoJson, error) {
 	chatInfoPath := filepath.Join(chatPath, infoFileName)
 	f, err := os.Create(chatInfoPath)
 	if err != nil {
+		os.Remove(chatInfoPath)
 		appConfig.LogErr(err, "creating %s", infoFileName)
 		return ChatInfoJson{}, err
 	}
@@ -263,6 +304,7 @@ func createChatInfo(chatUrl string) (ChatInfoJson, error) {
 
 	u, err := url.Parse(chatUrl)
 	if err != nil {
+		os.Remove(chatInfoPath)
 		appConfig.LogErr(err, "parsing URL: %s to string", chatUrl)
 		return ChatInfoJson{}, err
 	}
@@ -270,11 +312,13 @@ func createChatInfo(chatUrl string) (ChatInfoJson, error) {
 	var membersArr []chatMember
 	membersArr, err = addMeToMembers(membersArr)
 	if err != nil {
+		os.Remove(chatInfoPath)
 		return ChatInfoJson{}, err
 	}
 
 	chatName, err := getChatName(chatUrl)
 	if err != nil {
+		os.Remove(chatInfoPath)
 		return ChatInfoJson{}, err
 	}
 
@@ -287,31 +331,46 @@ func createChatInfo(chatUrl string) (ChatInfoJson, error) {
 
 	chatInfoJsonByte, err := json.Marshal(info)
 	if err != nil {
+		os.Remove(chatInfoPath)
 		appConfig.LogErr(err, "marshalling chat")
 		return ChatInfoJson{}, err
 	}
 
 	_, err = f.Write(chatInfoJsonByte)
 	if err != nil {
+		os.Remove(chatInfoPath)
 		appConfig.LogErr(err, "writing chat JSON to %s", infoFileName)
 		return ChatInfoJson{}, err
 	}
 
 	repo, err := git.PlainOpen(chatPath)
 	if err != nil {
+		os.Remove(chatInfoPath)
 		appConfig.LogErr(err, "openning repo %s", chatPath)
 		return ChatInfoJson{}, err
 	}
 
 	err = commit(repo, infoFileName, "Create info.json")
 	if err != nil {
-		appConfig.LogErr(err, "failed to commit chat info in: %s", chatName)
-		return ChatInfoJson{}, err
+		os.Remove(chatInfoPath)
+		appConfig.LogErr(err, ErrCommitChatInfo.Error()+" in: %s", chatName)
+		return ChatInfoJson{}, ErrCommitChatInfo
 	}
 
 	err = push(repo, &git.PushOptions{})
 	if err != nil {
-		appConfig.LogErr(err, "failed to push chat info in: %s", chatName)
+		err = resetLastCommit(repo, chatName)
+		if err != nil {
+			// go-git doesn't support git update-ref command yet, so delete repo in this case
+			os.RemoveAll(chatPath)
+			err = ErrResetLastCommit
+		}
+		if err != nil {
+			err = fmt.Errorf("%s: %w", ErrPushChatInfo.Error(), err)
+		} else {
+			err = ErrPushChatInfo
+		}
+		appConfig.LogErr(err, err.Error()+" in: %s", chatName)
 		return ChatInfoJson{}, err
 	}
 
@@ -578,6 +637,14 @@ func AddChat(chatUrl string) (Chat, Message, error) {
 		repo, err = addEmptyChat(chatUrl)
 		if err != nil {
 			return Chat{}, Message{}, err
+		}
+	case errors.Is(err, git.ErrRepositoryAlreadyExists):
+		chatName, err := getChatName(chatUrl)
+		if err != nil {
+			return Chat{}, Message{}, err
+		}
+		if c := findChatInList(Chat{Name: chatName}); c != nil {
+			return Chat{}, Message{}, ErrChatAlreadyAdded
 		}
 	case err != nil:
 		appConfig.LogErr(err, "failed to clone %s", chatUrl)

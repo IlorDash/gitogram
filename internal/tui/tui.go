@@ -350,10 +350,31 @@ func addHostModal(s *appScreen, p *tview.Pages, chatUrl string) {
 				return
 			}
 			chat, lastMsg, err := client.AddChat(chatUrl)
+
 			switch {
 			case errors.Is(err, client.ErrKnownhosts):
 				closeModalForm(p)
 				addHostModal(s, p, chatUrl)
+			case errors.Is(err, client.ErrChatAlreadyAdded):
+				closeModalForm(p)
+				addInfoModal(p, "Chat is already added", "Chat is already added. "+
+					"Nothind to do.")
+			case errors.Is(err, client.ErrCommitChatInfo):
+				closeModalForm(p)
+				addInfoModal(p, "Cannot create chat info",
+					"Failed to commit new chat info file, so removed chat info file. "+
+						"Please check your authorization and try add chat again.")
+			case errors.Is(err, client.ErrPushChatInfo):
+				closeModalForm(p)
+				if errors.Is(err, client.ErrResetLastCommit) {
+					addInfoModal(p, "Cannot create chat info",
+						"Failed to push new chat info file and reset it, so removed chat entirely. "+
+							"Please check your authorization and try add chat again.")
+				} else {
+					addInfoModal(p, "Cannot create chat info",
+						"Failed to push new chat info file, so reset this last commit. "+
+							"Please check your authorization and try add chat again.")
+				}
 			case err == nil:
 				// fallthrough ...
 			default:
@@ -394,6 +415,26 @@ func addChatModal(s *appScreen, p *tview.Pages) func() {
 				case errors.Is(err, client.ErrKnownhosts):
 					closeModalForm(p)
 					addHostModal(s, p, chatUrl)
+				case errors.Is(err, client.ErrChatAlreadyAdded):
+					closeModalForm(p)
+					addInfoModal(p, "Chat is already added", "Chat is already added. "+
+						"Nothind to do.")
+				case errors.Is(err, client.ErrCommitChatInfo):
+					closeModalForm(p)
+					addInfoModal(p, "Cannot create chat info",
+						"Failed to commit new chat info file, so removed chat info file. "+
+							"Please check your authorization and try add chat again.")
+				case errors.Is(err, client.ErrPushChatInfo):
+					closeModalForm(p)
+					if errors.Is(err, client.ErrResetLastCommit) {
+						addInfoModal(p, "Cannot create chat info",
+							"Failed to push new chat info file and reset it, so removed chat entirely. "+
+								"Please check your authorization and try add chat again.")
+					} else {
+						addInfoModal(p, "Cannot create chat info",
+							"Failed to push new chat info file, so reset this last commit. "+
+								"Please check your authorization and try add chat again.")
+					}
 				case err == nil:
 					// fallthrough ...
 				default:
