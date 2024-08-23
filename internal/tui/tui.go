@@ -92,7 +92,7 @@ func (s *appScreen) membersNum(num int) {
 	})
 }
 
-func updateChatHeader(s *appScreen, c client.ChatHeader) {
+func updateChatHeader(s *appScreen, c client.Chat) {
 	go func() {
 		s.chatName(c.Name)
 		s.membersNum(c.MembersNum)
