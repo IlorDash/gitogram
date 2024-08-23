@@ -122,7 +122,7 @@ func createChatLayout(s *appScreen) *chatLayout {
 			msg = newMsg
 		}).
 		SetDoneFunc(func(key tcell.Key) {
-			h, msgInfo, err := client.SendMsg(msg)
+			h, lastMsg, err := client.SendMsg(msg)
 			if err != nil {
 				appConfig.LogErr(err, "failed to send msg")
 				return
@@ -133,7 +133,7 @@ func createChatLayout(s *appScreen) *chatLayout {
 				return
 			}
 			updateChatHeader(s, h)
-			updCurrChatInList(s, chat, msgInfo)
+			updCurrChatInList(s, chat, lastMsg)
 		})
 
 	c.panel.AddItem(c.header.panel, 0, 2, false).
