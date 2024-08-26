@@ -237,7 +237,7 @@ func collectChatInfo(chatPath string) (ChatInfoJson, error) {
 }
 
 func getChatName(chatUrl string) (string, error) {
-	re := regexp.MustCompile(`\/([a-zA-Z0-9-]+)\.git`)
+	re := regexp.MustCompile(`\/([a-zA-Z0-9-]+\/[a-zA-Z0-9-]+)\.git`)
 	match := re.FindStringSubmatch(chatUrl)
 	if len(match) == 0 {
 		err := ErrNoMatchChatName
@@ -438,7 +438,7 @@ func getLastMsg(r *git.Repository) (Message, error) {
 	}, nil
 }
 
-const chatDir string = "chats/"
+const chatDir string = "chats"
 
 func getChatPath(chatUrl string) (string, error) {
 	chatName, err := getChatName(chatUrl)
@@ -446,7 +446,7 @@ func getChatPath(chatUrl string) (string, error) {
 		return "", err
 	}
 
-	return chatDir + chatName, nil
+	return filepath.Join(chatDir, chatName), nil
 }
 
 func isGitDir(dir string) bool {
@@ -489,43 +489,46 @@ func pullMsgs(r *git.Repository) (int, error) {
 
 func CollectChats() ([]Chat, []Message, error) {
 	var lastMsgArr []Message
-	files, _ := os.ReadDir(chatDir)
-	for _, f := range files {
-		chatPath := chatDir + f.Name()
-		if f.IsDir() && isGitDir(chatPath) {
-			info, err := collectChatInfo(chatPath)
-			if err != nil {
-				var pe *os.PathError
-				switch {
-				case errors.As(err, &pe):
-					appConfig.LogErr(err, "chat %s missing info.json", f.Name())
-					continue
-				default:
-					appConfig.LogErr(err, "unexpected during collect chats")
+	repos, _ := os.ReadDir(chatDir)
+	for _, r := range repos {
+		chats, _ := os.ReadDir(filepath.Join(chatDir, r.Name()))
+		for _, chat := range chats {
+			chatPath := filepath.Join(chatDir, r.Name(), chat.Name())
+			if chat.IsDir() && isGitDir(chatPath) {
+				info, err := collectChatInfo(chatPath)
+				if err != nil {
+					var pe *os.PathError
+					switch {
+					case errors.As(err, &pe):
+						appConfig.LogErr(err, "chat %s missing info.json", chatPath)
+						continue
+					default:
+						appConfig.LogErr(err, "unexpected during collect chats")
+						return nil, nil, err
+					}
+				}
+
+				repo, err := git.PlainOpen(chatPath)
+				if err != nil {
+					appConfig.LogErr(err, "openning repo %s", chatPath)
 					return nil, nil, err
 				}
-			}
 
-			repo, err := git.PlainOpen(chatPath)
-			if err != nil {
-				appConfig.LogErr(err, "openning repo %s", chatPath)
-				return nil, nil, err
-			}
+				msgNum, err := pullMsgs(repo)
+				if err != nil {
+					return nil, nil, err
+				}
 
-			msgNum, err := pullMsgs(repo)
-			if err != nil {
-				return nil, nil, err
-			}
+				chat := toChat(info)
+				chat.MsgNum = msgNum
+				Chats = append(Chats, chat)
 
-			chat := toChat(info)
-			chat.MsgNum = msgNum
-			Chats = append(Chats, chat)
-
-			lastMsg, err := getLastMsg(repo)
-			if err != nil {
-				return nil, nil, err
+				lastMsg, err := getLastMsg(repo)
+				if err != nil {
+					return nil, nil, err
+				}
+				lastMsgArr = append(lastMsgArr, lastMsg)
 			}
-			lastMsgArr = append(lastMsgArr, lastMsg)
 		}
 	}
 	return Chats, lastMsgArr, nil

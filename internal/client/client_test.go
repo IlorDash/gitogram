@@ -63,7 +63,7 @@ func TestAddChat(t *testing.T) {
 			name:     "Test common chat",
 			envName:  "TEST_CHAT_URL_REPO",
 			giveUrl:  "",
-			wantName: "gitogram-test",
+			wantName: "ilordash-rpi/gitogram-test",
 			wantErr:  nil,
 		}, {
 			name:     "Test empty url",
