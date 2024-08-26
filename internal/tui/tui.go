@@ -122,17 +122,12 @@ func createChatLayout(s *appScreen) *chatLayout {
 			msg = newMsg
 		}).
 		SetDoneFunc(func(key tcell.Key) {
-			h, lastMsg, err := client.SendMsg(msg)
+			chat, lastMsg, err := client.SendMsg(msg)
 			if err != nil {
 				appConfig.LogErr(err, "failed to send msg")
 				return
 			}
-			chat, err := client.GetCurrChat()
-			if err != nil {
-				appConfig.LogErr(err, "failed get current Chat")
-				return
-			}
-			updateChatHeader(s, h)
+			updateChatHeader(s, chat)
 			updCurrChatInList(s, chat, lastMsg)
 		})
 

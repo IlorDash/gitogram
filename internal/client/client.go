@@ -27,6 +27,7 @@ import (
 
 var (
 	ErrNoMatchChatName = errors.New("no match chat name")
+	ErrCurrChatNil     = errors.New("current chat is nil")
 
 	ErrKnownhosts       = errors.New("knownhosts")
 	ErrChatAlreadyAdded = errors.New("chat already added")
@@ -753,6 +754,10 @@ func SelectChat(chat Chat) (Chat, error) {
 }
 
 func SendMsg(text string) (Chat, Message, error) {
+	if currChat == nil {
+		return Chat{}, Message{}, ErrCurrChatNil
+	}
+
 	if currChat.Url == nil {
 		return Chat{}, Message{}, errors.New("missing url")
 	}
@@ -799,6 +804,9 @@ func SendMsg(text string) (Chat, Message, error) {
 }
 
 func GetCurrChat() (Chat, error) {
+	if currChat == nil {
+		return Chat{}, ErrCurrChatNil
+	}
 	return *currChat, nil
 }
 
