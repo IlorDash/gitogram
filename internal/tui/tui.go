@@ -122,13 +122,13 @@ func createChatLayout(s *appScreen) *chatLayout {
 			msg = newMsg
 		}).
 		SetDoneFunc(func(key tcell.Key) {
-			chat, lastMsg, err := client.SendMsg(msg)
+			chat, err := client.SendMsg(msg)
 			if err != nil {
 				appConfig.LogErr(err, "failed to send msg")
 				return
 			}
 			updateChatHeader(s, chat)
-			updCurrChatInList(s, chat, lastMsg)
+			updChatInList(s, s.main.selectChatIndex, chat)
 		})
 
 	c.panel.AddItem(c.header.panel, 0, 2, false).
@@ -141,8 +141,12 @@ func createChatLayout(s *appScreen) *chatLayout {
 func chatListUpperStr(n string, t string) string {
 	return fmt.Sprintf("%s %s", n, t)
 }
-func chatListBottomStr(a string, m string) string {
-	return fmt.Sprintf("%s: %s", a, m)
+func chatListBottomStr(a string, m string, n int) string {
+	if n == 0 {
+		return fmt.Sprintf("%s: %s", a, m)
+	} else {
+		return fmt.Sprintf("%s: %s %-d", a, m, n)
+	}
 }
 
 func chatListRelativeTime(t time.Time) string {
@@ -155,34 +159,36 @@ func chatListRelativeTime(t time.Time) string {
 	}
 }
 
-func handleChatSelected(s *appScreen, c client.Chat) {
-	log.Printf("Selected %s chat\n", c.Name)
-	h, err := client.SelectChat(c)
+func handleChatSelected(s *appScreen, chat client.Chat) {
+	log.Printf("Selected %s chat\n", chat.Name)
+	selectedChat, err := client.SelectChat(chat)
 	if err != nil {
 		return
 	}
-	updateChatHeader(s, h)
+	updateChatHeader(s, selectedChat)
 	s.main.selectChatIndex = s.main.chatList.GetCurrentItem()
+	updChatInList(s, s.main.selectChatIndex, selectedChat)
 }
 
-func addNewChatToList(s *appScreen, list *tview.List, chat client.Chat, lastMsg client.Message) {
-	list.AddItem(chatListUpperStr(chat.Name, chatListRelativeTime(lastMsg.Time)),
-		chatListBottomStr(lastMsg.Author, lastMsg.Text), 0,
+func addNewChatToList(s *appScreen, list *tview.List, chat client.Chat) {
+	list.AddItem(chatListUpperStr(chat.Name, chatListRelativeTime(chat.LastMsg.Time)),
+		chatListBottomStr(chat.LastMsg.Author, chat.LastMsg.Text, chat.NonReadMsgNum), 0,
 		func() { handleChatSelected(s, chat) })
 }
 
-func updCurrChatInList(s *appScreen, chat client.Chat, lastMsg client.Message) {
-	index := s.main.selectChatIndex
+func updChatInList(s *appScreen, index int, chat client.Chat) {
 	s.main.chatList.RemoveItem(index)
 
-	s.main.chatList.InsertItem(index, chatListUpperStr(chat.Name, chatListRelativeTime(lastMsg.Time)),
-		chatListBottomStr(lastMsg.Author, lastMsg.Text), 0,
+	s.main.chatList.InsertItem(index,
+		chatListUpperStr(chat.Name, chatListRelativeTime(chat.LastMsg.Time)),
+		chatListBottomStr(chat.LastMsg.Author, chat.LastMsg.Text, chat.NonReadMsgNum),
+		0,
 		func() { handleChatSelected(s, chat) })
-	s.main.chatList.SetCurrentItem(index)
+	s.main.chatList.SetCurrentItem(s.main.selectChatIndex)
 }
 
 func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
-	chats, lastMsgs, err := client.CollectChats()
+	chats, err := client.CollectChats()
 	if err != nil {
 		return nil, err
 	}
@@ -191,12 +197,34 @@ func createChatList(s *appScreen, p *tview.Pages) (*tview.List, error) {
 	chatList.SetBorder(true).SetTitle("Chats")
 	chatList.AddItem("New chat +", "", 0, addChatModal(s, p))
 
-	for i := 0; i < len(chats) && i < len(lastMsgs); i++ {
+	for i := 0; i < len(chats); i++ {
 		index := i
-		addNewChatToList(s, chatList, chats[index], lastMsgs[index])
+		addNewChatToList(s, chatList, chats[index])
 	}
 
 	return chatList, nil
+}
+
+func getChatListChatIndex(s *appScreen, chat client.Chat) int {
+	for i := 0; i < s.main.chatList.GetItemCount(); i++ {
+		upperStr, _ := s.main.chatList.GetItemText(i)
+		chatName := strings.Split(upperStr, " ")[0]
+		if chatName == chat.Name {
+			return i
+		}
+	}
+	return -1
+}
+
+var updChatChann chan client.Chat
+
+func waitChatForUpd(s *appScreen) {
+	go func() {
+		for {
+			updChat := <-updChatChann
+			updChatInList(s, getChatListChatIndex(s, updChat), updChat)
+		}
+	}()
 }
 
 type focusStruct struct {
@@ -286,6 +314,8 @@ func createMain(s *appScreen, p *tview.Pages) (*mainLayout, error) {
 
 	main.highlightPanel(main.chatList)
 
+	waitChatForUpd(s)
+
 	return main, nil
 }
 
@@ -344,7 +374,7 @@ func addHostModal(s *appScreen, p *tview.Pages, chatUrl string) {
 			if err != nil {
 				return
 			}
-			chat, lastMsg, err := client.AddChat(chatUrl)
+			chat, err := client.AddChat(chatUrl)
 
 			switch {
 			case errors.Is(err, client.ErrKnownhosts):
@@ -372,7 +402,7 @@ func addHostModal(s *appScreen, p *tview.Pages, chatUrl string) {
 				}
 			case err == nil:
 				s.app.QueueUpdateDraw(func() {
-					addNewChatToList(s, s.main.chatList, chat, lastMsg)
+					addNewChatToList(s, s.main.chatList, chat)
 				})
 				closeModalForm(p)
 			default:
@@ -401,7 +431,7 @@ func addChatModal(s *appScreen, p *tview.Pages) func() {
 		})
 		getChatForm.AddButton("Add", func() {
 			go func() {
-				chat, lastMsg, err := client.AddChat(chatUrl)
+				chat, err := client.AddChat(chatUrl)
 
 				switch {
 				case errors.Is(err, client.ErrKnownhosts):
@@ -429,7 +459,7 @@ func addChatModal(s *appScreen, p *tview.Pages) func() {
 					}
 				case err == nil:
 					s.app.QueueUpdateDraw(func() {
-						addNewChatToList(s, s.main.chatList, chat, lastMsg)
+						addNewChatToList(s, s.main.chatList, chat)
 					})
 				default:
 					closeModalForm(p)
@@ -479,32 +509,34 @@ func (m *mainLayout) highlightPanel(p tview.Primitive) error {
 	return nil
 }
 
-func (s *appScreen) focusNextPanel() error {
+func (s *appScreen) focusNextPanel() (tview.Primitive, error) {
 	if s.currPage == "main" {
 		focus := s.main.focus
 		f := (focus.curr + 1) % len(focus.panels)
 		panel, err := focus.setPanel(f)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		s.app.SetFocus(panel)
 		s.main.highlightPanel(panel)
+		return panel, nil
+
 	} else if s.currPage == "log" {
 		focus := s.log.focus
 		f := (focus.curr + 1) % len(focus.panels)
 		panel, err := focus.setPanel(f)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		s.app.SetFocus(panel)
 		s.log.highlightPanel(panel)
-	} else {
-		return errors.New("wromg current page")
-	}
+		return panel, nil
 
-	return nil
+	} else {
+		return nil, errors.New("wrong current page")
+	}
 }
 
 func showMembers() func(event *tcell.EventKey) *tcell.EventKey {
@@ -528,9 +560,23 @@ func quitApp(s *appScreen) func(event *tcell.EventKey) *tcell.EventKey {
 
 func switchPanel(s *appScreen) func(event *tcell.EventKey) *tcell.EventKey {
 	return func(event *tcell.EventKey) *tcell.EventKey {
-		err := s.focusNextPanel()
+		panel, err := s.focusNextPanel()
 		if err != nil {
 			log.Fatalln(err)
+		}
+		chat, err := client.GetCurrChat()
+		if err != nil {
+			return nil
+		}
+
+		if s.currPage == "main" &&
+			(panel == s.main.chat.dialogue || panel == s.main.chat.message) &&
+			chat.NonReadMsgNum != 0 {
+			chat, err = client.ClearNonReadMsgsForCurrChat()
+			if err != nil {
+				return nil
+			}
+			updChatInList(s, getChatListChatIndex(s, chat), chat)
 		}
 		return nil
 	}
@@ -663,6 +709,8 @@ func setOutputs(s *appScreen) {
 }
 
 func createApp() (*tview.Application, error) {
+	updChatChann = client.Init()
+
 	screen := &appScreen{}
 	screen.app = tview.NewApplication()
 	pages := tview.NewPages()
