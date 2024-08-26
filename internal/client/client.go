@@ -687,9 +687,9 @@ func AddChat(chatUrl string) (Chat, Message, error) {
 }
 
 func findChatInList(chat Chat) *Chat {
-	for _, c := range Chats {
-		if c.Name == chat.Name {
-			return &c
+	for idx := range Chats {
+		if Chats[idx].Name == chat.Name {
+			return &Chats[idx]
 		}
 	}
 	return nil
