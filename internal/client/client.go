@@ -623,7 +623,13 @@ func CollectChats() ([]Chat, error) {
 func hostKeyCallback(hostname string, remote net.Addr, key ssh.PublicKey) error {
 	newLine := knownhosts.Line([]string{knownhosts.HashHostname(knownhosts.Normalize(hostname))}, key)
 
-	f, err := os.OpenFile(filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		appConfig.LogErr(err, "error getting home directory")
+		return err
+	}
+
+	f, err := os.OpenFile(filepath.Join(homeDir, ".ssh", "known_hosts"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		appConfig.LogErr(err, "failed open knownhosts")
 		return err
