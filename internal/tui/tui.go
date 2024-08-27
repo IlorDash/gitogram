@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -667,36 +666,46 @@ func dialogueNewDate(t time.Time) string {
 	return t.Format("January 2")
 }
 
-func borderMsg(top string, bot string, width int, rightAlign bool) string {
+func splitString(s, open, clos string, splitLen, padding int) []string {
+	var chunks []string
+
+	for i := 0; i < len(s); i += splitLen {
+		end := i + splitLen
+		fillSpaces := 0
+		if end > len(s) {
+			fillSpaces = end - len(s)
+			end = len(s)
+		}
+		chunks = append(chunks, fmt.Sprintf("%*s", padding, open+s[i:end]+strings.Repeat(" ", fillSpaces)+clos))
+	}
+
+	return chunks
+}
+
+func borderMsg(top string, bot string, width int, rightAlign bool) []string {
+	var res []string
 	textViewBorderWidth := 2
 	actualTextWidth := width - textViewBorderWidth
-	l := max(len(top), len(bot)) + textViewBorderWidth
-	diff := int(math.Abs(float64(len(top) - len(bot))))
+	strLen := max(len(top), len(bot)) + textViewBorderWidth
 
-	if len(top) > len(bot) {
-		bot = bot + strings.Repeat(" ", diff)
-	} else {
-		top = top + strings.Repeat(" ", diff)
+	if strLen > actualTextWidth {
+		strLen = actualTextWidth - 1
 	}
 
-	padding := l + 1
+	padding := strLen
 	if rightAlign {
-		padding = actualTextWidth - 1
+		padding = actualTextWidth
 	}
 
-	topBordered := fmt.Sprintf("%*s",
-		padding+len("[blue]"+"[white]"),
-		"|"+"[blue]"+top+"[white]"+"|")
+	tops := splitString(top, "|", "|", strLen-(textViewBorderWidth), padding)
+	bots := splitString(bot, "|", "|", strLen-(textViewBorderWidth), padding)
 
-	botBordered := fmt.Sprintf("%*s", padding, "|"+bot+"|")
+	tops[0] = tops[0][:padding-strLen+1] + "[blue]" + tops[0][padding-strLen+1:len(tops[0])-1] + "[white]|"
 
-	res := fmt.Sprintf("%*s\n%s\n%s\n%*s\n",
-		padding,
-		strings.Repeat("-", l),
-		topBordered,
-		botBordered,
-		padding,
-		strings.Repeat("-", l))
+	res = append(res, fmt.Sprintf("%*s", padding-1, strings.Repeat("-", strLen-textViewBorderWidth)))
+	res = append(res, tops...)
+	res = append(res, bots...)
+	res = append(res, fmt.Sprintf("%*s", padding-1, strings.Repeat("-", strLen-textViewBorderWidth)))
 
 	return res
 }
@@ -719,7 +728,10 @@ func printMsg(s *appScreen, m client.Message) {
 	topLine := m.Author + " " + m.Time.Format("15:04")
 	bottomLine := m.Text
 	_, _, width, _ := s.main.chat.dialogue.GetRect()
-	dialogue.Println(borderMsg(topLine, bottomLine, width, ourMsg))
+	msg := borderMsg(topLine, bottomLine, width, ourMsg)
+	for _, m := range msg {
+		dialogue.Println(m)
+	}
 	s.main.chat.dialogue.ScrollToEnd()
 }
 
