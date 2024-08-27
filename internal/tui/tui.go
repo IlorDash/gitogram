@@ -372,14 +372,15 @@ func addHostModal(s *appScreen, p *tview.Pages, chatUrl string) {
 		go func() {
 			err := client.AddHost(chatUrl)
 			if err != nil {
+				closeModalForm(p)
+				addInfoModal(p, "Unexpected error during add host",
+					fmt.Sprintf("Encountered unexpected error during add host: %v.", err)+
+						"For more info look into logs.")
 				return
 			}
 			chat, err := client.AddChat(chatUrl)
 
 			switch {
-			case errors.Is(err, client.ErrKnownhosts):
-				closeModalForm(p)
-				addHostModal(s, p, chatUrl)
 			case errors.Is(err, client.ErrChatAlreadyAdded):
 				closeModalForm(p)
 				addInfoModal(p, "Chat is already added", "Chat is already added. "+
@@ -408,7 +409,8 @@ func addHostModal(s *appScreen, p *tview.Pages, chatUrl string) {
 			default:
 				closeModalForm(p)
 				addInfoModal(p, "Unexpected error during add chat",
-					"Encountered unexpected error during add chat. Please look into the logs.")
+					fmt.Sprintf("Encountered unexpected error during add chat: %v", err)+
+						"For more info look into logs.")
 			}
 		}()
 	})
