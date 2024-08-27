@@ -194,7 +194,7 @@ func getUserEmail() (string, error) {
 	return cfg.Raw.Section("user").Option("email"), nil
 }
 
-func getUserName() (string, error) {
+func GetUserName() (string, error) {
 	cfg, err := getGitConfig()
 	if err != nil {
 		appConfig.LogErr(err, "getting username")
@@ -205,7 +205,7 @@ func getUserName() (string, error) {
 }
 
 func foundMeInMembers(members []chatMember) (bool, error) {
-	name, err := getUserName()
+	name, err := GetUserName()
 	if err != nil {
 		return true, err
 	}
@@ -218,7 +218,7 @@ func foundMeInMembers(members []chatMember) (bool, error) {
 }
 
 func addMeToMembers(members []chatMember) ([]chatMember, error) {
-	username, err := getUserName()
+	username, err := GetUserName()
 	if err != nil {
 		return members, err
 	}
@@ -242,7 +242,7 @@ func commit(r *git.Repository, fileName string, msg string) error {
 		}
 	}
 
-	username, err := getUserName()
+	username, err := GetUserName()
 	if err != nil {
 		return err
 	}

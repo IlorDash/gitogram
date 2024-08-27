@@ -667,8 +667,10 @@ func dialogueNewDate(t time.Time) string {
 	return t.Format("January 2")
 }
 
-func borderMsg(top string, bot string) string {
-	l := max(len(top), len(bot)) + 2
+func borderMsg(top string, bot string, width int, rightAlign bool) string {
+	textViewBorderWidth := 2
+	actualTextWidth := width - textViewBorderWidth
+	l := max(len(top), len(bot)) + textViewBorderWidth
 	diff := int(math.Abs(float64(len(top) - len(bot))))
 
 	if len(top) > len(bot) {
@@ -677,9 +679,24 @@ func borderMsg(top string, bot string) string {
 		top = top + strings.Repeat(" ", diff)
 	}
 
-	top = "|" + "[blue]" + top + "[white]" + "|"
-	bot = "|" + bot + "|"
-	res := fmt.Sprintf("%s\n%s\n%s\n%s\n", strings.Repeat("-", l), top, bot, strings.Repeat("-", l))
+	padding := l + 1
+	if rightAlign {
+		padding = actualTextWidth - 1
+	}
+
+	topBordered := fmt.Sprintf("%*s",
+		padding+len("[blue]"+"[white]"),
+		"|"+"[blue]"+top+"[white]"+"|")
+
+	botBordered := fmt.Sprintf("%*s", padding, "|"+bot+"|")
+
+	res := fmt.Sprintf("%*s\n%s\n%s\n%*s\n",
+		padding,
+		strings.Repeat("-", l),
+		topBordered,
+		botBordered,
+		padding,
+		strings.Repeat("-", l))
 
 	return res
 }
@@ -688,15 +705,26 @@ type tuiMessageHandler struct{ s *appScreen }
 
 var dialogue *log.Logger
 
-func (h tuiMessageHandler) Print(m client.Message) {
+func printMsg(s *appScreen, m client.Message) {
+	username, err := client.GetUserName()
+	if err != nil {
+		return
+	}
+	ourMsg := m.Author == username
+
 	if newDate(m.Time) {
 		dialogue.Println(dialogueNewDate(m.Time) + "\n")
 	}
 
 	topLine := m.Author + " " + m.Time.Format("15:04")
 	bottomLine := m.Text
-	dialogue.Println(borderMsg(topLine, bottomLine))
-	h.s.main.chat.dialogue.ScrollToEnd()
+	_, _, width, _ := s.main.chat.dialogue.GetRect()
+	dialogue.Println(borderMsg(topLine, bottomLine, width, ourMsg))
+	s.main.chat.dialogue.ScrollToEnd()
+}
+
+func (h tuiMessageHandler) Print(m client.Message) {
+	printMsg(h.s, m)
 }
 
 func setOutputs(s *appScreen) {
