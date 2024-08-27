@@ -1,8 +1,8 @@
-name: gitogram
+name: build
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "test-win-x86-build" ]
   pull_request:
     branches: [ "main" ]
 
@@ -18,11 +18,22 @@ jobs:
       with:
         go-version: '1.22'
 
-    - name: Build
-      run: go build -v cmd/gitogram.go
+    - name: Build Linux 
+      run: |
+        go build -o ./linux/gitogram -v cmd/gitogram.go
 
-    - name: Upload artifacts
+    - name: Build Windows
+      run: |
+        GOOS=windows GOARCH=amd64 go build -o ./win/gitogram.exe -v cmd/gitogram.go
+
+    - name: Upload artifacts Linux
       uses: actions/upload-artifact@v4
       with:
-        name: gitogram
-        path: ./
+        name: gitogram-linux
+        path: ./linux/gitogram
+
+    - name: Upload artifacts Windows
+      uses: actions/upload-artifact@v4
+      with:
+        name: gitogram-win
+        path: ./win/gitogram.exe
