@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log"
@@ -682,54 +683,40 @@ func splitString(s, open, clos string, splitLen, padding int) []string {
 	return chunks
 }
 
-func borderMsg(top string, bot string, width int, rightAlign bool) []string {
-	var res []string
-	textViewBorderWidth := 2
-	actualTextWidth := width - textViewBorderWidth
-	strLen := max(len(top), len(bot)) + textViewBorderWidth
+func getColorFromUsername(username string) string {
+	hash := sha256.New()
+	hash.Write([]byte(username))
+	hashSum := hash.Sum(nil)
 
-	if strLen > actualTextWidth {
-		strLen = actualTextWidth - 1
-	}
+	r := hashSum[0]
+	g := hashSum[1]
+	b := hashSum[2]
 
-	padding := strLen
-	if rightAlign {
-		padding = actualTextWidth
-	}
-
-	tops := splitString(top, "|", "|", strLen-(textViewBorderWidth), padding)
-	bots := splitString(bot, "|", "|", strLen-(textViewBorderWidth), padding)
-
-	tops[0] = tops[0][:padding-strLen+1] + "[blue]" + tops[0][padding-strLen+1:len(tops[0])-1] + "[white]|"
-
-	res = append(res, fmt.Sprintf("%*s", padding-1, strings.Repeat("-", strLen-textViewBorderWidth)))
-	res = append(res, tops...)
-	res = append(res, bots...)
-	res = append(res, fmt.Sprintf("%*s", padding-1, strings.Repeat("-", strLen-textViewBorderWidth)))
-
-	return res
+	color := fmt.Sprintf("#%02x%02x%02x", r, g, b)
+	return color
 }
 
 var dialogue *log.Logger
 
 func printMsg(s *appScreen, m client.Message) {
+	usernameColor := getColorFromUsername(m.Author)
+
 	username, err := client.GetUserName()
 	if err != nil {
 		return
 	}
-	ourMsg := m.Author == username
+
+	bgColor := ""
+	if m.Author == username {
+		bgColor = "gray"
+	}
 
 	if newDate(m.Time) {
-		dialogue.Println(dialogueNewDate(m.Time) + "\n")
+		dialogue.Println("[:blue]---------->>> " + dialogueNewDate(m.Time) + "[-:-:-:-]\n")
 	}
 
-	topLine := m.Author + " " + m.Time.Format("15:04")
-	bottomLine := m.Text
-	_, _, width, _ := s.main.chat.dialogue.GetRect()
-	msg := borderMsg(topLine, bottomLine, width, ourMsg)
-	for _, m := range msg {
-		dialogue.Println(m)
-	}
+	msg := fmt.Sprintf("[%s:%s:b]%s [%s][-::-:-]\n%s[-:-:-:-]\n", usernameColor, bgColor, m.Author, m.Time.Format("15:04"), m.Text)
+	dialogue.Println(msg)
 	s.main.chat.dialogue.ScrollToEnd()
 }
 
