@@ -710,8 +710,6 @@ func borderMsg(top string, bot string, width int, rightAlign bool) []string {
 	return res
 }
 
-type tuiMessageHandler struct{ s *appScreen }
-
 var dialogue *log.Logger
 
 func printMsg(s *appScreen, m client.Message) {
@@ -735,8 +733,15 @@ func printMsg(s *appScreen, m client.Message) {
 	s.main.chat.dialogue.ScrollToEnd()
 }
 
-func (h tuiMessageHandler) Print(m client.Message) {
-	printMsg(h.s, m)
+var msgChann chan client.Message
+
+func waitForMsg(s *appScreen) {
+	go func() {
+		for {
+			msg := <-msgChann
+			printMsg(s, msg)
+		}
+	}()
 }
 
 func setOutputs(s *appScreen) {
@@ -747,11 +752,11 @@ func setOutputs(s *appScreen) {
 		log.Println("You're in Debug mode")
 	}
 
-	client.SetMessageHandler(tuiMessageHandler{s: s})
+	waitForMsg(s)
 }
 
 func createApp() (*tview.Application, error) {
-	updChatChann = client.Init()
+	updChatChann, msgChann = client.Init()
 
 	screen := &appScreen{}
 	screen.app = tview.NewApplication()

@@ -45,12 +45,6 @@ type Message struct {
 	Time   time.Time
 }
 
-type MsgHandler interface {
-	Print(msg Message)
-}
-
-var msgHandler MsgHandler
-
 type chatMember struct {
 	Username    string    `json:"Username"`
 	VisibleName string    `json:"VisibleName"`
@@ -91,6 +85,7 @@ func newChat(i ChatInfoJson, msgNum int, lastMsg Message) Chat {
 var Chats []Chat
 var currChat *Chat
 
+var msgChann chan Message
 var updChatChann chan Chat
 
 func pollChatsForMsgs() {
@@ -160,11 +155,12 @@ func pollChatsForMsgs() {
 	}()
 }
 
-func Init() chan Chat {
+func Init() (chan Chat, chan Message) {
 	updChatChann = make(chan Chat)
+	msgChann = make(chan Message)
 
 	pollChatsForMsgs()
-	return updChatChann
+	return updChatChann, msgChann
 }
 
 func getGitConfig() (*config.Config, error) {
@@ -821,7 +817,7 @@ func printMsgs(msgs []Message) {
 	// Messages from the Log come from the most recent ones,
 	// so print them in reverse order
 	for i := len(msgs) - 1; i >= 0; i-- {
-		msgHandler.Print(msgs[i])
+		msgChann <- msgs[i]
 	}
 }
 
@@ -858,7 +854,9 @@ func SelectChat(chat Chat) (Chat, error) {
 		if err != nil {
 			return Chat{}, err
 		}
-		printMsgs(msgs)
+		go func() {
+			printMsgs(msgs)
+		}()
 		return *currChat, nil
 	}
 	return Chat{}, fmt.Errorf("chat %s not found", chat.Name)
@@ -917,7 +915,9 @@ func SendMsg(text string) (Chat, error) {
 		return Chat{}, err
 	}
 
-	printMsgs([]Message{currChat.LastMsg})
+	go func() {
+		printMsgs([]Message{currChat.LastMsg})
+	}()
 
 	return *currChat, nil
 }
@@ -936,8 +936,4 @@ func GetCurrChat() (Chat, error) {
 		return Chat{}, ErrCurrChatNil
 	}
 	return *currChat, nil
-}
-
-func SetMessageHandler(h MsgHandler) {
-	msgHandler = h
 }
