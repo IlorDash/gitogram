@@ -531,11 +531,9 @@ func pullMsgs(r *git.Repository, since *time.Time) (int, error) {
 	}
 
 	err = w.Pull(&git.PullOptions{RemoteName: "origin"})
-	if err != nil {
-		if err.Error() != "already up-to-date" {
-			appConfig.LogErr(err, "pulling messages")
-			return 0, err
-		}
+	if (err != nil) && (err != git.NoErrAlreadyUpToDate) {
+		appConfig.LogErr(err, "pulling messages")
+		return 0, err
 	}
 
 	cIter, err := r.Log(&git.LogOptions{Since: since})
