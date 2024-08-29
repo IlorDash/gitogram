@@ -279,7 +279,7 @@ func push(r *git.Repository, opt *git.PushOptions) error {
 
 const infoFileName string = "info.json"
 
-func collectChatInfo(chatPath string) (ChatInfoJson, error) {
+func collectChatInfo(repo *git.Repository, chatPath string) (ChatInfoJson, error) {
 	jsonFile, err := os.Open(filepath.Join(chatPath, infoFileName))
 	if err != nil {
 		appConfig.LogErr(err, "%s", infoFileName)
@@ -312,7 +312,7 @@ func collectChatInfo(chatPath string) (ChatInfoJson, error) {
 			return ChatInfoJson{}, err
 		}
 		info.MembersNum = len(info.Members)
-		updateChatInfo(info)
+		updateChatInfo(repo, info)
 	}
 
 	return info, nil
@@ -363,7 +363,7 @@ func resetLastCommit(repo *git.Repository, chatName string) error {
 	return nil
 }
 
-func createChatInfo(chatUrl string) (ChatInfoJson, error) {
+func createChatInfo(repo *git.Repository, chatUrl string) (ChatInfoJson, error) {
 	chatPath, err := getChatPath(chatUrl)
 	if err != nil {
 		return ChatInfoJson{}, err
@@ -420,13 +420,6 @@ func createChatInfo(chatUrl string) (ChatInfoJson, error) {
 		return ChatInfoJson{}, err
 	}
 
-	repo, err := git.PlainOpen(chatPath)
-	if err != nil {
-		os.Remove(chatInfoPath)
-		appConfig.LogErr(err, "openning repo %s", chatPath)
-		return ChatInfoJson{}, err
-	}
-
 	err = commit(repo, infoFileName, "Create info.json")
 	if err != nil {
 		os.Remove(chatInfoPath)
@@ -454,7 +447,7 @@ func createChatInfo(chatUrl string) (ChatInfoJson, error) {
 	return info, nil
 }
 
-func updateChatInfo(info ChatInfoJson) error {
+func updateChatInfo(repo *git.Repository, info ChatInfoJson) error {
 	chatInfoJson, _ := json.Marshal(info)
 
 	chatPath, err := getChatPath(info.Url.Path)
@@ -478,12 +471,6 @@ func updateChatInfo(info ChatInfoJson) error {
 	_, err = f.Write(chatInfoJson)
 	if err != nil {
 		appConfig.LogErr(err, "writing to %s", infoFilePath)
-		return err
-	}
-
-	repo, err := git.PlainOpen(chatPath)
-	if err != nil {
-		appConfig.LogErr(err, "openning repo %s", chatPath)
 		return err
 	}
 
@@ -583,7 +570,13 @@ func CollectChats() ([]Chat, error) {
 		for _, chat := range chats {
 			chatPath := filepath.Join(chatDir, r.Name(), chat.Name())
 			if chat.IsDir() && isGitDir(chatPath) {
-				info, err := collectChatInfo(chatPath)
+				repo, err := git.PlainOpen(chatPath)
+				if err != nil {
+					appConfig.LogErr(err, "openning repo %s", chatPath)
+					return nil, err
+				}
+
+				info, err := collectChatInfo(repo, chatPath)
 				if err != nil {
 					var pe *os.PathError
 					switch {
@@ -594,12 +587,6 @@ func CollectChats() ([]Chat, error) {
 						appConfig.LogErr(err, "unexpected during collect chats")
 						return nil, err
 					}
-				}
-
-				repo, err := git.PlainOpen(chatPath)
-				if err != nil {
-					appConfig.LogErr(err, "openning repo %s", chatPath)
-					return nil, err
 				}
 
 				msgNum, err := pullMsgs(repo, nil)
@@ -736,6 +723,13 @@ func AddChat(chatUrl string) (Chat, error) {
 		if c := findChatInList(Chat{Name: chatName}); c != nil {
 			return Chat{}, ErrChatAlreadyAdded
 		}
+		// If git.PlainClone returned ErrRepositoryAlreadyExists repo will nil,
+		// so reopen it here
+		repo, err = git.PlainOpen(chatPath)
+		if err != nil {
+			appConfig.LogErr(err, "openning repo %s", chatPath)
+			return Chat{}, err
+		}
 	case err != nil:
 		appConfig.LogErr(err, "failed to clone %s", chatUrl)
 		return Chat{}, err
@@ -743,12 +737,12 @@ func AddChat(chatUrl string) (Chat, error) {
 		appConfig.LogDebug("Clone repo %s", chatPath)
 	}
 
-	info, err := collectChatInfo(chatPath)
+	info, err := collectChatInfo(repo, chatPath)
 	if err != nil {
 		var e *os.PathError
 		switch {
 		case errors.As(err, &e):
-			info, err = createChatInfo(chatUrl)
+			info, err = createChatInfo(repo, chatUrl)
 			if err != nil {
 				appConfig.LogErr(err, "failed to create chat info")
 				return Chat{}, err
