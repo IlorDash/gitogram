@@ -127,6 +127,7 @@ func createChatLayout(s *appScreen) *chatLayout {
 				appConfig.LogErr(err, "failed to send msg")
 				return
 			}
+			c.message.SetText("")
 			updateChatHeader(s, chat)
 			updChatInList(s, s.main.selectChatIndex, chat)
 		})
