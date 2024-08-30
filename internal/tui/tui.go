@@ -402,6 +402,7 @@ func addHostModal(s *appScreen, p *tview.Pages, chatUrl string) {
 							"Please check your authorization and try add chat again.")
 				}
 			case err == nil:
+				closeModalForm(p)
 				s.app.QueueUpdateDraw(func() {
 					addNewChatToList(s, s.main.chatList, chat)
 				})
@@ -460,6 +461,7 @@ func addChatModal(s *appScreen, p *tview.Pages) func() {
 								"Please check your authorization and try add chat again.")
 					}
 				case err == nil:
+					closeModalForm(p)
 					s.app.QueueUpdateDraw(func() {
 						addNewChatToList(s, s.main.chatList, chat)
 					})
