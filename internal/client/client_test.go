@@ -2,6 +2,7 @@ package client
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 
@@ -83,14 +84,14 @@ func TestAddChat(t *testing.T) {
 			envName:  "TEST_CHAT_URL_EMPTY",
 			giveUrl:  "",
 			wantName: "",
-			wantErr:  ErrPushChatInfo,
+			wantErr:  fmt.Errorf("%s: %w", ErrPushChatInfo.Error(), errors.New("unknown error: Gogs: You do not have sufficient authorization for this action")),
 		},
 		{
 			name:     "Test already clonned chat",
 			envName:  "TEST_CHAT_URL_EMPTY",
 			giveUrl:  "",
 			wantName: "",
-			wantErr:  ErrPushChatInfo,
+			wantErr:  fmt.Errorf("%s: %w", ErrPushChatInfo.Error(), errors.New("unknown error: Gogs: You do not have sufficient authorization for this action")),
 		},
 	}
 
@@ -114,7 +115,7 @@ func TestAddChat(t *testing.T) {
 
 	for _, tt := range subtests {
 		t.Run(tt.name, func(t *testing.T) {
-			ans, err := AddChat(tt.giveUrl)
+			ans, err := AddChat(tt.giveUrl, "", "")
 			assert.Equal(t, tt.wantName, ans.Name)
 			assert.Equal(t, tt.wantErr, err)
 		})

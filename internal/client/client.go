@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -30,9 +32,10 @@ var (
 	ErrNoMatchChatName = errors.New("no match chat name")
 	ErrCurrChatNil     = errors.New("current chat is nil")
 
-	ErrKnownhosts       = errors.New("knownhosts")
-	ErrChatAlreadyAdded = errors.New("chat already added")
-	ErrCreateChatInfo   = errors.New("failed to create chat info")
+	ErrKnownhosts             = errors.New("knownhosts")
+	ErrChatAlreadyAdded       = errors.New("chat already added")
+	ErrCreateChatInfo         = errors.New("failed to create chat info")
+	ErrAuthenticationRequired = transport.ErrAuthenticationRequired
 
 	ErrCommitChatInfo  = errors.New("failed to commit chat info, remove file")
 	ErrPushChatInfo    = errors.New("failed to push chat info, reset commit")
@@ -67,9 +70,11 @@ type Chat struct {
 	MsgNum        int
 	LastMsg       Message
 	NonReadMsgNum int
+	username      string
+	password      string
 }
 
-func newChat(i ChatInfoJson, msgNum int, lastMsg Message) Chat {
+func newChat(i ChatInfoJson, msgNum int, lastMsg Message, u, p string) Chat {
 	return Chat{
 		mu:            new(sync.Mutex),
 		Url:           i.Url,
@@ -79,6 +84,8 @@ func newChat(i ChatInfoJson, msgNum int, lastMsg Message) Chat {
 		MsgNum:        msgNum,
 		LastMsg:       lastMsg,
 		NonReadMsgNum: 0,
+		username:      u,
+		password:      p,
 	}
 }
 
@@ -87,6 +94,19 @@ var currChat *Chat
 
 var msgChann chan Message
 var updChatChann chan Chat
+
+func getAuth(username, password string) (transport.AuthMethod, error) {
+	var auth http.BasicAuth
+	if password != "" {
+		auth = http.BasicAuth{
+			Username: username,
+			Password: password,
+		}
+		return &auth, nil
+	}
+	return nil, nil
+
+}
 
 func pollChatsForMsgs() {
 	go func() {
@@ -120,7 +140,9 @@ func pollChatsForMsgs() {
 						return
 					}
 
-					newMsgs, err := pullMsgs(repo, &commit.Committer.When)
+					auth, _ := getAuth(Chats[idx].username, Chats[idx].password)
+					newMsgs, err := pullMsgs(repo, &commit.Committer.When,
+						&git.PullOptions{RemoteName: "origin", Auth: auth})
 					if err != nil {
 						return
 					}
@@ -279,7 +301,7 @@ func push(r *git.Repository, opt *git.PushOptions) error {
 
 const infoFileName string = "info.json"
 
-func collectChatInfo(repo *git.Repository, chatPath string) (ChatInfoJson, error) {
+func collectChatInfo(chatPath string) (ChatInfoJson, error) {
 	jsonFile, err := os.Open(filepath.Join(chatPath, infoFileName))
 	if err != nil {
 		appConfig.LogErr(err, "%s", infoFileName)
@@ -299,20 +321,6 @@ func collectChatInfo(repo *git.Repository, chatPath string) (ChatInfoJson, error
 	if err != nil {
 		appConfig.LogErr(err, "unmarshalling %s", infoFileName)
 		return ChatInfoJson{}, err
-	}
-
-	inMembers, err := foundMeInMembers(info.Members)
-	if err != nil {
-		return ChatInfoJson{}, err
-	}
-
-	if !inMembers {
-		info.Members, err = addMeToMembers(info.Members)
-		if err != nil {
-			return ChatInfoJson{}, err
-		}
-		info.MembersNum = len(info.Members)
-		updateChatInfo(repo, info)
 	}
 
 	return info, nil
@@ -363,7 +371,7 @@ func resetLastCommit(repo *git.Repository, chatName string) error {
 	return nil
 }
 
-func createChatInfo(repo *git.Repository, chatUrl string) (ChatInfoJson, error) {
+func createChatInfo(repo *git.Repository, chatUrl string, auth transport.AuthMethod) (ChatInfoJson, error) {
 	chatPath, err := getChatPath(chatUrl)
 	if err != nil {
 		return ChatInfoJson{}, err
@@ -427,19 +435,17 @@ func createChatInfo(repo *git.Repository, chatUrl string) (ChatInfoJson, error) 
 		return ChatInfoJson{}, ErrCommitChatInfo
 	}
 
-	err = push(repo, &git.PushOptions{})
-	if err != nil {
+	origErr := push(repo, &git.PushOptions{Auth: auth})
+	if origErr != nil {
 		err = resetLastCommit(repo, chatName)
 		if err != nil {
 			// go-git doesn't support git update-ref command yet, so delete repo in this case
 			os.RemoveAll(chatPath)
-			err = ErrResetLastCommit
-		}
-		if err != nil {
-			err = fmt.Errorf("%s: %w", ErrPushChatInfo.Error(), err)
+			err = fmt.Errorf("%s: %w", ErrResetLastCommit.Error(), origErr)
 		} else {
-			err = ErrPushChatInfo
+			err = origErr
 		}
+		err = fmt.Errorf("%s: %w", ErrPushChatInfo.Error(), err)
 		appConfig.LogErr(err, err.Error()+" in: %s", chatName)
 		return ChatInfoJson{}, err
 	}
@@ -447,7 +453,7 @@ func createChatInfo(repo *git.Repository, chatUrl string) (ChatInfoJson, error) 
 	return info, nil
 }
 
-func updateChatInfo(repo *git.Repository, info ChatInfoJson) error {
+func updateChatInfo(repo *git.Repository, info ChatInfoJson, auth transport.AuthMethod) error {
 	chatInfoJson, _ := json.Marshal(info)
 
 	chatPath, err := getChatPath(info.Url.Path)
@@ -479,7 +485,7 @@ func updateChatInfo(repo *git.Repository, info ChatInfoJson) error {
 		return err
 	}
 
-	err = push(repo, &git.PushOptions{})
+	err = push(repo, &git.PushOptions{Auth: auth})
 	if err != nil {
 		return err
 	}
@@ -523,14 +529,14 @@ func isGitDir(dir string) bool {
 	return err == nil
 }
 
-func pullMsgs(r *git.Repository, since *time.Time) (int, error) {
+func pullMsgs(r *git.Repository, since *time.Time, opt *git.PullOptions) (int, error) {
 	w, err := r.Worktree()
 	if err != nil {
 		appConfig.LogErr(err, "retrieving worktree")
 		return 0, err
 	}
 
-	err = w.Pull(&git.PullOptions{RemoteName: "origin"})
+	err = w.Pull(opt)
 	if (err != nil) && (err != git.NoErrAlreadyUpToDate) {
 		appConfig.LogErr(err, "pulling messages")
 		return 0, err
@@ -561,12 +567,60 @@ func pullMsgs(r *git.Repository, since *time.Time) (int, error) {
 	return newMsg, nil
 }
 
+const credsFileName string = ".credentials"
+const credsFileDelim string = " "
+
+func getCredentialsFromLocalFile(chatName string) transport.AuthMethod {
+	credsFilePath := filepath.Join(chatDir, credsFileName)
+	credsFile, err := os.Open(credsFilePath)
+	if err != nil {
+		appConfig.LogErr(err, "failed to open %s", credsFilePath)
+		return nil
+	}
+	defer credsFile.Close()
+
+	credsScanner := bufio.NewScanner(credsFile)
+	credsScanner.Split(bufio.ScanLines)
+
+	for credsScanner.Scan() {
+		slice := strings.SplitN(credsScanner.Text(), credsFileDelim, 2)
+		if slice[0] == chatName {
+			username, err := GetUserName()
+			if err != nil {
+				return nil
+			}
+			return &http.BasicAuth{
+				Username: username,
+				Password: slice[1],
+			}
+		}
+	}
+	appConfig.LogErr(err, "failed to get credentials for %s from %s", chatName, credsFilePath)
+	return nil
+}
+
+func addCredentialsToLocalFile(chatName string, auth http.BasicAuth) error {
+	credsFilePath := filepath.Join(chatDir, credsFileName)
+	credsFile, err := os.OpenFile(credsFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		appConfig.LogErr(err, "failed to open %s to add creds", credsFilePath)
+		return err
+	}
+	defer credsFile.Close()
+	if _, err := credsFile.WriteString(chatName + credsFileDelim + auth.Password); err != nil {
+		appConfig.LogErr(err, "failed to write creds to %s", credsFilePath)
+		return err
+	}
+	return nil
+}
+
 func CollectChats() ([]Chat, error) {
 	repos, _ := os.ReadDir(chatDir)
 	for _, r := range repos {
 		chats, _ := os.ReadDir(filepath.Join(chatDir, r.Name()))
 		for _, chat := range chats {
-			chatPath := filepath.Join(chatDir, r.Name(), chat.Name())
+			chatName := filepath.Join(r.Name(), chat.Name())
+			chatPath := filepath.Join(chatDir, chatName)
 			if chat.IsDir() && isGitDir(chatPath) {
 				repo, err := git.PlainOpen(chatPath)
 				if err != nil {
@@ -574,7 +628,7 @@ func CollectChats() ([]Chat, error) {
 					return nil, err
 				}
 
-				info, err := collectChatInfo(repo, chatPath)
+				info, err := collectChatInfo(chatPath)
 				if err != nil {
 					var pe *os.PathError
 					switch {
@@ -587,7 +641,13 @@ func CollectChats() ([]Chat, error) {
 					}
 				}
 
-				msgNum, err := pullMsgs(repo, nil)
+				var auth transport.AuthMethod
+				if (info.Url.Scheme == "http") || (info.Url.Scheme == "https") {
+					auth = getCredentialsFromLocalFile(chatName)
+				}
+
+				msgNum, err := pullMsgs(repo, nil,
+					&git.PullOptions{RemoteName: "origin", Auth: auth})
 				if err != nil {
 					return nil, err
 				}
@@ -597,7 +657,15 @@ func CollectChats() ([]Chat, error) {
 					return nil, err
 				}
 
-				chat := newChat(info, msgNum, lastMsg)
+				var basicAuth http.BasicAuth
+				b, ok := auth.(*http.BasicAuth)
+				if !ok {
+					basicAuth = http.BasicAuth{}
+				} else {
+					basicAuth = *b
+				}
+
+				chat := newChat(info, msgNum, lastMsg, basicAuth.Username, basicAuth.Password)
 				Chats = append(Chats, chat)
 			}
 		}
@@ -688,8 +756,18 @@ func addEmptyChat(chatUrl string) (*git.Repository, error) {
 	return repo, nil
 }
 
-func AddChat(chatUrl string) (Chat, error) {
+func AddChat(chatUrl, username, password string) (Chat, error) {
 	chatPath, err := getChatPath(chatUrl)
+	if err != nil {
+		return Chat{}, err
+	}
+
+	chatName, err := getChatName(chatUrl)
+	if err != nil {
+		return Chat{}, err
+	}
+
+	auth, err := getAuth(username, password)
 	if err != nil {
 		return Chat{}, err
 	}
@@ -699,6 +777,7 @@ func AddChat(chatUrl string) (Chat, error) {
 	repo, err = git.PlainClone(chatPath, false, &git.CloneOptions{
 		URL:               chatUrl,
 		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
+		Auth:              auth,
 	})
 
 	var khErr *knownhosts.KeyError
@@ -714,10 +793,6 @@ func AddChat(chatUrl string) (Chat, error) {
 			return Chat{}, err
 		}
 	case errors.Is(err, git.ErrRepositoryAlreadyExists):
-		chatName, err := getChatName(chatUrl)
-		if err != nil {
-			return Chat{}, err
-		}
 		if c := findChatInList(Chat{Name: chatName}); c != nil {
 			return Chat{}, ErrChatAlreadyAdded
 		}
@@ -728,32 +803,68 @@ func AddChat(chatUrl string) (Chat, error) {
 			appConfig.LogErr(err, "openning repo %s", chatPath)
 			return Chat{}, err
 		}
+	case errors.Is(err, transport.ErrAuthenticationRequired):
+		appConfig.LogErr(err, "authentication required for %s", chatUrl)
+		return Chat{}, ErrAuthenticationRequired
 	case err != nil:
 		appConfig.LogErr(err, "failed to clone %s", chatUrl)
 		return Chat{}, err
-	default:
-		appConfig.LogDebug("Clone repo %s", chatPath)
 	}
 
-	info, err := collectChatInfo(repo, chatPath)
-	if err != nil {
-		var e *os.PathError
+	appConfig.LogDebug("Clone repo %s", chatPath)
+	info, err := collectChatInfo(chatPath)
+	var e *os.PathError
+	switch {
+	case errors.As(err, &e):
+		info, err = createChatInfo(repo, chatUrl, auth)
 		switch {
-		case errors.As(err, &e):
-			info, err = createChatInfo(repo, chatUrl)
-			if err != nil {
-				appConfig.LogErr(err, "failed to create chat info")
-				return Chat{}, err
-			}
-			appConfig.LogDebug("Create chat info file")
+		case errors.Is(err, transport.ErrAuthenticationRequired):
+			appConfig.LogErr(err, "authentication required for %s", chatUrl)
+			return Chat{}, ErrAuthenticationRequired
+		case err != nil:
+			appConfig.LogErr(err, "unexpected error during create chat info")
+			return Chat{}, err
+		}
+		appConfig.LogDebug("Create chat info file")
+	case err != nil:
+		appConfig.LogErr(err, "unexpected during collect chat info")
+		return Chat{}, err
+	}
 
-		default:
-			appConfig.LogErr(err, "unexpected during collect chat info")
+	inMembers, err := foundMeInMembers(info.Members)
+	if err != nil {
+		return Chat{}, err
+	}
+
+	if !inMembers {
+		info.Members, err = addMeToMembers(info.Members)
+		if err != nil {
+			return Chat{}, err
+		}
+		info.MembersNum = len(info.Members)
+		err = updateChatInfo(repo, info, auth)
+		if err != nil {
 			return Chat{}, err
 		}
 	}
 
-	msgNum, err := pullMsgs(repo, nil)
+	var basicAuth http.BasicAuth
+	b, ok := auth.(*http.BasicAuth)
+	if !ok {
+		basicAuth = http.BasicAuth{}
+	} else {
+		basicAuth = *b
+	}
+
+	if basicAuth != (http.BasicAuth{}) {
+		err = addCredentialsToLocalFile(chatName, basicAuth)
+		if err != nil {
+			return Chat{}, err
+		}
+	}
+
+	msgNum, err := pullMsgs(repo, nil,
+		&git.PullOptions{RemoteName: "origin", Auth: auth})
 	if err != nil {
 		return Chat{}, err
 	}
@@ -763,7 +874,7 @@ func AddChat(chatUrl string) (Chat, error) {
 		return Chat{}, err
 	}
 
-	chat := newChat(info, msgNum, lastMsg)
+	chat := newChat(info, msgNum, lastMsg, basicAuth.Username, basicAuth.Password)
 	Chats = append(Chats, chat)
 
 	return chat, nil
@@ -832,7 +943,13 @@ func SelectChat(chat Chat) (Chat, error) {
 				return err
 			}
 
-			msgNum, err := pullMsgs(repo, nil)
+			auth, err := getAuth(currChat.username, currChat.password)
+			if err != nil {
+				return err
+			}
+
+			msgNum, err := pullMsgs(repo, nil,
+				&git.PullOptions{RemoteName: "origin", Auth: auth})
 			if err != nil {
 				return err
 			}
@@ -859,7 +976,12 @@ func SendMsg(text string) (Chat, error) {
 		return Chat{}, ErrCurrChatNil
 	}
 
-	err := func() error {
+	auth, err := getAuth(currChat.username, currChat.password)
+	if err != nil {
+		return Chat{}, err
+	}
+
+	err = func() error {
 		currChat.mu.Lock()
 		defer currChat.mu.Unlock()
 
@@ -878,7 +1000,8 @@ func SendMsg(text string) (Chat, error) {
 			return err
 		}
 
-		msgNum, err := pullMsgs(repo, nil)
+		msgNum, err := pullMsgs(repo, nil,
+			&git.PullOptions{RemoteName: "origin", Auth: auth})
 		if err != nil {
 			return err
 		}
@@ -890,8 +1013,13 @@ func SendMsg(text string) (Chat, error) {
 			return err
 		}
 
-		err = push(repo, &git.PushOptions{})
-		if err != nil {
+		err = push(repo, &git.PushOptions{Auth: auth})
+		switch {
+		case errors.Is(err, transport.ErrAuthenticationRequired):
+			appConfig.LogErr(err, "authentication required for %s", currChat.Url.Path)
+			return ErrAuthenticationRequired
+		case err != nil:
+			appConfig.LogErr(err, "failed to push %s", currChat.Url.Path)
 			return err
 		}
 		appConfig.LogDebug("Send msg %s to %s", text, currChat.Name)
