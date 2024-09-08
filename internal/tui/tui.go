@@ -100,7 +100,7 @@ func updateChatHeader(s *appScreen, c client.Chat) {
 	}()
 }
 
-func createChatLayout(s *appScreen) *chatLayout {
+func createChatLayout(s *appScreen, p *tview.Pages) *chatLayout {
 	c := &chatLayout{}
 	c.panel = tview.NewFlex().SetDirection(tview.FlexRow)
 	c.panel.SetBorder(true)
@@ -124,7 +124,9 @@ func createChatLayout(s *appScreen) *chatLayout {
 		SetDoneFunc(func(key tcell.Key) {
 			chat, err := client.SendMsg(msg)
 			if err != nil {
-				appConfig.LogErr(err, "failed to send msg")
+				closeModalForm(p)
+				addInfoModal(p, "Unexpected error during send message",
+					"Encountered unexpected error during send message. Please look into the logs.")
 				return
 			}
 			c.message.SetText("")
@@ -301,7 +303,7 @@ func createMain(s *appScreen, p *tview.Pages) (*mainLayout, error) {
 		return nil, err
 	}
 	main.selectChatIndex = 0
-	main.chat = createChatLayout(s)
+	main.chat = createChatLayout(s, p)
 	main.cmds = createCommands(s, p)
 
 	innerLayout := tview.NewFlex().SetDirection(tview.FlexColumn).
@@ -358,6 +360,75 @@ func addInfoModal(p *tview.Pages, title string, info string) {
 	p.AddPage("modal", modal, true, true)
 }
 
+func handleAddChat(s *appScreen, p *tview.Pages, chatUrl, username, password string) {
+	chat, err := client.AddChat(chatUrl, username, password)
+
+	switch {
+	case errors.Is(err, client.ErrKnownhosts):
+		closeModalForm(p)
+		addHostModal(s, p, chatUrl)
+	case errors.Is(err, client.ErrChatAlreadyAdded):
+		closeModalForm(p)
+		addInfoModal(p, "Chat is already added", "Chat is already added. "+
+			"Nothind to do.")
+	case errors.Is(err, client.ErrCommitChatInfo):
+		closeModalForm(p)
+		addInfoModal(p, "Cannot create chat info",
+			"Failed to commit new chat info file, so removed chat info file. "+
+				"Please check your authorization and try add chat again.")
+	case errors.Is(err, client.ErrPushChatInfo):
+		closeModalForm(p)
+		if errors.Is(err, client.ErrResetLastCommit) {
+			addInfoModal(p, "Cannot create chat info",
+				"Failed to push new chat info file and reset it, so removed chat entirely. "+
+					"Please check your authorization and try add chat again.")
+		} else {
+			addInfoModal(p, "Cannot create chat info",
+				"Failed to push new chat info file, so reset this last commit. "+
+					"Please check your authorization and try add chat again.")
+		}
+	case errors.Is(err, client.ErrAuthenticationRequired):
+		closeModalForm(p)
+		addAuthModal(s, p, chatUrl)
+	case err != nil:
+		closeModalForm(p)
+		addInfoModal(p, "Unexpected error during add chat",
+			"Encountered unexpected error during add chat. Please look into the logs.")
+	default:
+		closeModalForm(p)
+		s.app.QueueUpdateDraw(func() {
+			addNewChatToList(s, s.main.chatList, chat)
+		})
+	}
+}
+
+func addAuthModal(s *appScreen, p *tview.Pages, chatUrl string) {
+	var username, password string
+	addAuthForm := tview.NewForm()
+	addAuthForm.AddTextView("",
+		fmt.Sprintf("Authentication is required for %s", chatUrl), 0, 0, false, false)
+	addAuthForm.AddInputField("Username", "", 50, nil, func(u string) {
+		username = u
+	})
+	addAuthForm.AddPasswordField("Password", "", 50, 0, func(p string) {
+		password = p
+	})
+	addAuthForm.AddButton("Proceed", func() {
+		go func() {
+			closeModalForm(p)
+			handleAddChat(s, p, chatUrl, username, password)
+		}()
+	})
+	addAuthForm.AddButton("Exit", func() {
+		closeModalForm(p)
+	})
+
+	addAuthForm.SetButtonsAlign(tview.AlignCenter)
+	addAuthForm.SetBorder(true).SetTitle("Authentication is required")
+	modal := createModalForm(addAuthForm, 16, 70)
+	p.AddPage("modal", modal, true, true)
+}
+
 func addHostModal(s *appScreen, p *tview.Pages, chatUrl string) {
 	host, err := client.GetHost(chatUrl)
 	if err != nil {
@@ -379,41 +450,7 @@ func addHostModal(s *appScreen, p *tview.Pages, chatUrl string) {
 						"For more info look into logs.")
 				return
 			}
-			chat, err := client.AddChat(chatUrl)
-
-			switch {
-			case errors.Is(err, client.ErrChatAlreadyAdded):
-				closeModalForm(p)
-				addInfoModal(p, "Chat is already added", "Chat is already added. "+
-					"Nothind to do.")
-			case errors.Is(err, client.ErrCommitChatInfo):
-				closeModalForm(p)
-				addInfoModal(p, "Cannot create chat info",
-					"Failed to commit new chat info file, so removed chat info file. "+
-						"Please check your authorization and try add chat again.")
-			case errors.Is(err, client.ErrPushChatInfo):
-				closeModalForm(p)
-				if errors.Is(err, client.ErrResetLastCommit) {
-					addInfoModal(p, "Cannot create chat info",
-						"Failed to push new chat info file and reset it, so removed chat entirely. "+
-							"Please check your authorization and try add chat again.")
-				} else {
-					addInfoModal(p, "Cannot create chat info",
-						"Failed to push new chat info file, so reset this last commit. "+
-							"Please check your authorization and try add chat again.")
-				}
-			case err == nil:
-				closeModalForm(p)
-				s.app.QueueUpdateDraw(func() {
-					addNewChatToList(s, s.main.chatList, chat)
-				})
-				closeModalForm(p)
-			default:
-				closeModalForm(p)
-				addInfoModal(p, "Unexpected error during add chat",
-					fmt.Sprintf("Encountered unexpected error during add chat: %v", err)+
-						"For more info look into logs.")
-			}
+			handleAddChat(s, p, chatUrl, "", "")
 		}()
 	})
 	addHostForm.AddButton("No", func() {
@@ -435,42 +472,7 @@ func addChatModal(s *appScreen, p *tview.Pages) func() {
 		})
 		getChatForm.AddButton("Add", func() {
 			go func() {
-				chat, err := client.AddChat(chatUrl)
-
-				switch {
-				case errors.Is(err, client.ErrKnownhosts):
-					closeModalForm(p)
-					addHostModal(s, p, chatUrl)
-				case errors.Is(err, client.ErrChatAlreadyAdded):
-					closeModalForm(p)
-					addInfoModal(p, "Chat is already added", "Chat is already added. "+
-						"Nothind to do.")
-				case errors.Is(err, client.ErrCommitChatInfo):
-					closeModalForm(p)
-					addInfoModal(p, "Cannot create chat info",
-						"Failed to commit new chat info file, so removed chat info file. "+
-							"Please check your authorization and try add chat again.")
-				case errors.Is(err, client.ErrPushChatInfo):
-					closeModalForm(p)
-					if errors.Is(err, client.ErrResetLastCommit) {
-						addInfoModal(p, "Cannot create chat info",
-							"Failed to push new chat info file and reset it, so removed chat entirely. "+
-								"Please check your authorization and try add chat again.")
-					} else {
-						addInfoModal(p, "Cannot create chat info",
-							"Failed to push new chat info file, so reset this last commit. "+
-								"Please check your authorization and try add chat again.")
-					}
-				case err == nil:
-					closeModalForm(p)
-					s.app.QueueUpdateDraw(func() {
-						addNewChatToList(s, s.main.chatList, chat)
-					})
-				default:
-					closeModalForm(p)
-					addInfoModal(p, "Unexpected error during add chat",
-						"Encountered unexpected error during add chat. Please look into the logs.")
-				}
+				handleAddChat(s, p, chatUrl, "", "")
 			}()
 		})
 
