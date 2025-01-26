@@ -49,7 +49,7 @@ docker run \
 
 	You can optionally setup Admin Account in Optional Settings:
 
-      * **Username** - Setyour Git username.
+      * **Username** - Set your Git username.
 	  * **Password** - Set your password with at least 8 characters.
 	  * **E-mail** - Set your Git email address.
 
